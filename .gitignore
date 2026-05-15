@@ -1,0 +1,26 @@
+﻿node_modules/
+.next/
+.open-next/
+.wrangler/
+dist/
+build/
+coverage/
+.cache/
+.turbo/
+
+.env
+.env.*
+*.local
+profiles.json
+GITHUB VÀ CLOUDFARE*.txt
+
+*.sql
+backup_*.sql
+schema_*.sql
+*.db
+*.sqlite
+
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini

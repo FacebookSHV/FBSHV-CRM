@@ -1,0 +1,53 @@
+{
+  "name": "fbshv-crm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:cloudflare": "opennextjs-cloudflare build",
+    "deploy": "opennextjs-cloudflare deploy",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node scripts/migrate-local-d1.mjs",
+    "db:seed": "node scripts/seed-d1.mjs",
+    "secrets:generate": "node scripts/generate-ecommerce-shared-secrets.mjs",
+    "secrets:check": "node scripts/check-secrets.mjs",
+    "secrets:import-input": "node scripts/import-secret-input.mjs",
+    "secrets:set:crm": "node scripts/set-cloudflare-secrets-from-env.mjs",
+    "secrets:set:cloudflare": "node scripts/set-cloudflare-secrets-from-env.mjs",
+    "secrets:set:github": "node scripts/set-github-secrets-from-env.mjs",
+    "check:env": "node scripts/check-env.mjs",
+    "cloudflare:check": "node scripts/check-cloudflare-project.mjs",
+    "size:check": "node scripts/check-file-sizes.mjs",
+    "hygiene:check": "node scripts/check-project-hygiene.mjs"
+  },
+  "dependencies": {
+    "@opennextjs/cloudflare": "^1.13.0",
+    "drizzle-orm": "^0.38.4",
+    "lucide-react": "^0.468.0",
+    "next": "^15.1.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^2.15.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241224.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "autoprefixer": "^10.4.20",
+    "drizzle-kit": "^0.30.2",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.1.3",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "wrangler": "^4.71.0"
+  }
+}

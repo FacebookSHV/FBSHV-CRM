@@ -1,0 +1,18 @@
+name = "fbshv-crm"
+main = ".open-next/worker.js"
+compatibility_date = "2026-05-15"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fbshv_crm_db"
+database_id = "fbb7faa5-7dff-4165-ba3c-591adf5334e2"
+migrations_dir = "drizzle"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "fbshv-crm-assets"
