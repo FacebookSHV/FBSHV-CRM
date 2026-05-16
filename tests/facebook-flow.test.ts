@@ -1,8 +1,10 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { GET as verifyFacebookWebhook, POST as receiveFacebookWebhook } from "@/app/api/webhooks/facebook/route";
 import { MockFacebookClient } from "@/lib/facebook/client";
+import { detectVietnamesePhone, resetFacebookAutomationMemoryForTests } from "@/lib/facebook/automation";
 import { getFacebookRuntimeConfig } from "@/lib/facebook/env";
 import { FACEBOOK_OAUTH_SCOPES } from "@/lib/facebook/oauth";
+import { withMetaPermission } from "@/lib/facebook/permissions";
 import { getMemoryFacebookStoreForTests } from "@/lib/facebook/store";
 import { parseFacebookWebhookPayload } from "@/lib/facebook/webhook";
 
@@ -59,7 +61,11 @@ function commentPayload(commentId = "comment_test_1") {
 describe("facebook real-flow helpers", () => {
   beforeEach(() => {
     process.env.MOCK_EXTERNAL_APIS = "true";
+    process.env.AUTO_REPLY_MESSAGES_ENABLED = "false";
+    process.env.AUTO_REPLY_COMMENTS_ENABLED = "false";
+    process.env.AUTO_HIDE_PHONE_COMMENTS_ENABLED = "false";
     getMemoryFacebookStoreForTests().resetForTests();
+    resetFacebookAutomationMemoryForTests();
   });
 
   it("env validation fail-fast khi tắt mock nhưng thiếu Meta secret", () => {
@@ -83,8 +89,23 @@ describe("facebook real-flow helpers", () => {
     await expect(response.text()).resolves.toBe("abc123");
   });
 
-  it("OAuth chỉ xin quyền tối thiểu cho Page discovery và đọc engagement", () => {
-    expect(FACEBOOK_OAUTH_SCOPES).toEqual(["pages_show_list", "pages_manage_metadata", "pages_read_engagement"]);
+  it("OAuth xin quyền Page cần thiết và không chứa business/ads scopes", () => {
+    expect(FACEBOOK_OAUTH_SCOPES).toEqual([
+      "pages_show_list",
+      "pages_manage_metadata",
+      "pages_read_engagement",
+      "pages_messaging",
+      "pages_manage_engagement",
+      "pages_manage_posts"
+    ]);
+    expect(FACEBOOK_OAUTH_SCOPES).not.toContain("business_management");
+    expect(FACEBOOK_OAUTH_SCOPES).not.toContain("ads_read");
+    expect(FACEBOOK_OAUTH_SCOPES).not.toContain("ads_management");
+  });
+
+  it("phát hiện số điện thoại Việt Nam trong bình luận", () => {
+    expect(detectVietnamesePhone("Shop gọi em 090 123 4567 nhé")).toBe(true);
+    expect(detectVietnamesePhone("Mã SKU ABC-12345 không phải số điện thoại")).toBe(false);
   });
 
   it("parse Messenger message", () => {
@@ -111,6 +132,41 @@ describe("facebook real-flow helpers", () => {
     expect(firstPayload.data.duplicates).toBe(0);
     expect(secondPayload.data.processed).toBe(0);
     expect(secondPayload.data.duplicates).toBe(1);
+  });
+
+  it("auto reply message không gửi trùng khi webhook retry", async () => {
+    process.env.AUTO_REPLY_MESSAGES_ENABLED = "true";
+    const body = JSON.stringify(messengerPayload("mid_auto_reply"));
+    await receiveFacebookWebhook(new Request("http://localhost/api/webhooks/facebook", { method: "POST", body }));
+    await receiveFacebookWebhook(new Request("http://localhost/api/webhooks/facebook", { method: "POST", body }));
+
+    const messages = await getMemoryFacebookStoreForTests().listMessages("conv_page_test_1_customer_test_1");
+    expect(messages.filter((message) => message.direction === "outbound")).toHaveLength(1);
+  });
+
+  it("auto reply comment và auto hide số điện thoại không chạy trùng", async () => {
+    process.env.AUTO_REPLY_COMMENTS_ENABLED = "true";
+    process.env.AUTO_HIDE_PHONE_COMMENTS_ENABLED = "true";
+    const payload = commentPayload("comment_phone_auto");
+    payload.entry[0]!.changes[0]!.value.message = "Shop gọi 090.123.4567 giúp em";
+    const body = JSON.stringify(payload);
+
+    await receiveFacebookWebhook(new Request("http://localhost/api/webhooks/facebook", { method: "POST", body }));
+    await receiveFacebookWebhook(new Request("http://localhost/api/webhooks/facebook", { method: "POST", body }));
+
+    const comment = (await getMemoryFacebookStoreForTests().listComments()).find(
+      (item) => item.externalCommentId === "comment_phone_auto"
+    );
+    expect(comment?.hidden).toBe(true);
+    expect(comment?.replied).toBe(true);
+  });
+
+  it("thiếu quyền Meta trả BLOCKED_META_PERMISSION_MISSING", async () => {
+    await expect(
+      withMetaPermission("pages_messaging", async () => {
+        throw new Error("Meta permission denied");
+      })
+    ).rejects.toThrow("BLOCKED_META_PERMISSION_MISSING: pages_messaging");
   });
 
   it("mock Facebook client không gọi Meta thật", async () => {

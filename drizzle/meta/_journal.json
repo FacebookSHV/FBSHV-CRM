@@ -15,6 +15,13 @@
       "when": 1778832000000,
       "tag": "0001_facebook_real_flow",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1778868000000,
+      "tag": "0002_growth_automation_content",
+      "breakpoints": true
     }
   ]
 }

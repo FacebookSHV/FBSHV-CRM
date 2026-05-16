@@ -15,6 +15,7 @@ profiles.json
 GITHUB VÀ CLOUDFARE*.txt
 
 *.sql
+!drizzle/*.sql
 backup_*.sql
 schema_*.sql
 *.db

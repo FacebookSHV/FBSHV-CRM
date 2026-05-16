@@ -17,7 +17,9 @@ export function failFromError(error: unknown, fallback = "Lỗi hệ thống") {
   const message = error instanceof Error ? error.message : fallback;
   const code = message.startsWith("BLOCKED_BY_MISSING_BINDING")
     ? "BLOCKED_BY_MISSING_BINDING"
-    : message.startsWith("BLOCKED_BY_MISSING_SECRET")
+    : message.startsWith("BLOCKED_META_PERMISSION_MISSING")
+      ? "BLOCKED_META_PERMISSION_MISSING"
+      : message.startsWith("BLOCKED_BY_MISSING_SECRET")
       ? "BLOCKED_BY_MISSING_SECRET"
       : "INTERNAL_ERROR";
   const status = code.startsWith("BLOCKED") ? 400 : 500;

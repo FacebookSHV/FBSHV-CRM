@@ -1,4 +1,5 @@
 import { fail, failFromError, ok } from "@/lib/api-response";
+import { runFacebookAutomation } from "@/lib/facebook/automation";
 import { getFacebookRuntimeConfig } from "@/lib/facebook/env";
 import { persistParsedFacebookEvent } from "@/lib/facebook/operations";
 import {
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
   const events = parseFacebookWebhookPayload(payload);
   let processed = 0;
   let duplicates = 0;
+  const automation: Array<{ actionType: string; status: string; error?: string }> = [];
 
   for (const event of events) {
     let result;
@@ -40,14 +42,19 @@ export async function POST(request: Request) {
     } catch (error) {
       return failFromError(error);
     }
-    if (result.duplicate) duplicates += 1;
-    else processed += 1;
+    if (result.duplicate) {
+      duplicates += 1;
+    } else {
+      processed += 1;
+      automation.push(...(await runFacebookAutomation(event)));
+    }
   }
 
   return ok({
     received: events.length,
     processed,
     duplicates,
+    automation,
     signatureValid,
     mode: config.mode
   });

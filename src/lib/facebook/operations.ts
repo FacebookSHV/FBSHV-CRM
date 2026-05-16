@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { DEFAULT_USER_ID, DEFAULT_WORKSPACE_ID } from "./types";
 import { getFacebookStore } from "./store";
+import { withMetaPermission } from "./permissions";
 
 function nowIso() {
   return new Date().toISOString();
@@ -273,7 +274,9 @@ export async function sendMessengerReply(conversationId: string, message: string
   const recipientId = conversation.externalConversationId?.split(":")[1] || conversation.customerId || "";
   if (!recipientId) return { success: false as const, error: "Thiếu Facebook recipient id." };
 
-  const result = await createFacebookClient(config).sendMessage(page.externalPageId, token, recipientId, message);
+  const result = await withMetaPermission("pages_messaging", () =>
+    createFacebookClient(config).sendMessage(page.externalPageId, token, recipientId, message)
+  );
   const now = nowIso();
   await store.upsertMessage({
     id: crypto.randomUUID(),
@@ -312,7 +315,9 @@ export async function replyFacebookComment(commentId: string, message: string) {
   if (!page) return { success: false as const, error: "Không tìm thấy fanpage." };
 
   const token = await getPageToken(page, config);
-  const result = await createFacebookClient(config).replyComment(token, comment.externalCommentId, message);
+  const result = await withMetaPermission("pages_manage_engagement", () =>
+    createFacebookClient(config).replyComment(token, comment.externalCommentId, message)
+  );
   await store.updateCommentState(comment.id, { replied: true });
   return { success: true as const, data: { replyId: result.externalId, mock: result.mock } };
 }
@@ -329,7 +334,9 @@ export async function setFacebookCommentHidden(commentId: string, hidden: boolea
   if (!page) return { success: false as const, error: "Không tìm thấy fanpage." };
 
   const token = await getPageToken(page, config);
-  const result = await createFacebookClient(config).setCommentHidden(token, comment.externalCommentId, hidden);
+  const result = await withMetaPermission("pages_manage_engagement", () =>
+    createFacebookClient(config).setCommentHidden(token, comment.externalCommentId, hidden)
+  );
   await store.updateCommentState(comment.id, { hidden });
   return { success: true as const, data: { actionId: result.externalId, hidden, mock: result.mock } };
 }
