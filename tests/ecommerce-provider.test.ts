@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST as createFacebookOrder } from "@/app/api/ecommerce/orders/from-facebook/route";
+import { HttpEcommerceManagementProvider } from "@/lib/ecommerce/http-provider";
 import { getEcommerceProvider } from "@/lib/ecommerce/provider";
 import { MockEcommerceManagementProvider } from "@/lib/ecommerce/mock-provider";
 import { canApplyLocalInventoryMutation } from "@/lib/orders/inventory-safety";
@@ -11,6 +12,10 @@ type ApiPayload<T> = {
 };
 
 describe("mock ecommerce provider", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("lấy danh sách sản phẩm mock", async () => {
     const provider = new MockEcommerceManagementProvider();
     const result = await provider.getProducts();
@@ -90,5 +95,30 @@ describe("mock ecommerce provider", () => {
     const payload = (await response.json()) as ApiPayload<{ externalOrderId: string }>;
     expect(payload.success).toBe(true);
     expect(payload.data.externalOrderId).toContain("ECOM-MOCK");
+  });
+
+  it("HTTP provider gọi đúng namespace /api/external khi lấy sản phẩm", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      async (input: RequestInfo | URL) => {
+        calls.push(String(input));
+        return new Response(JSON.stringify({ success: true, data: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+    );
+
+    const provider = new HttpEcommerceManagementProvider({
+      baseUrl: "https://ecommerce.example.com",
+      apiKey: "test-key"
+    });
+    const result = await provider.getProducts({ q: "camera", limit: 5 });
+
+    expect(result.success).toBe(true);
+    expect(calls).toEqual([
+      "https://ecommerce.example.com/api/external/products?search=camera&limit=5"
+    ]);
   });
 });

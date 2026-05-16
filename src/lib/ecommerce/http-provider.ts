@@ -41,35 +41,35 @@ export class HttpEcommerceManagementProvider implements EcommerceManagementProvi
 
   getProducts(params: ProductQuery = {}) {
     const search = new URLSearchParams();
-    if (params.q) search.set("q", params.q);
+    if (params.q) search.set("search", params.q);
     if (params.sku) search.set("sku", params.sku);
     if (params.limit) search.set("limit", String(params.limit));
-    return this.request<ProductWithInventory[]>(`/api/facebook-crm/products?${search}`);
+    return this.request<ProductWithInventory[]>(`/api/external/products?${search}`);
   }
 
   getProductById(productId: string) {
-    return this.request<ProductWithInventory>(`/api/facebook-crm/products/${encodeURIComponent(productId)}`);
+    return this.request<ProductWithInventory>(`/api/external/products/${encodeURIComponent(productId)}`);
   }
 
   getProductBySku(sku: string) {
-    return this.request<ProductWithInventory>(`/api/facebook-crm/products/sku/${encodeURIComponent(sku)}`);
+    return this.request<ProductWithInventory>(`/api/external/products/sku/${encodeURIComponent(sku)}`);
   }
 
   getSkuPrice(sku: string) {
     return this.request<{ sku: string; price: number; currency: string }>(
-      `/api/facebook-crm/products/sku/${encodeURIComponent(sku)}/price`
+      `/api/external/products/sku/${encodeURIComponent(sku)}/price`
     );
   }
 
   checkInventory(sku: string, quantity: number) {
-    return this.request<InventoryCheck>("/api/facebook-crm/inventory/check", {
+    return this.request<InventoryCheck>("/api/external/inventory/check", {
       method: "POST",
       body: JSON.stringify({ sku, quantity })
     });
   }
 
   reserveInventory(sku: string, quantity: number, metadata?: Record<string, unknown>) {
-    return this.request<InventoryReservation>("/api/facebook-crm/inventory/reserve", {
+    return this.request<InventoryReservation>("/api/external/inventory/reserve", {
       method: "POST",
       headers:
         typeof metadata?.idempotencyKey === "string"
@@ -81,30 +81,30 @@ export class HttpEcommerceManagementProvider implements EcommerceManagementProvi
 
   cancelReservation(reservationId: string) {
     return this.request<InventoryReservation>(
-      `/api/facebook-crm/inventory/reserve/${encodeURIComponent(reservationId)}/cancel`,
+      `/api/external/inventory/reservations/${encodeURIComponent(reservationId)}/cancel`,
       { method: "POST" }
     );
   }
 
   createOrderFromFacebook(payload: FacebookOrderPayload) {
-    return this.request<ExternalOrder>("/api/facebook-crm/orders/from-facebook", {
+    return this.request<ExternalOrder>("/api/external/orders/from-facebook", {
       method: "POST",
       body: JSON.stringify(payload)
     });
   }
 
   getOrder(orderId: string) {
-    return this.request<ExternalOrder>(`/api/facebook-crm/orders/${encodeURIComponent(orderId)}`);
+    return this.request<ExternalOrder>(`/api/external/orders/${encodeURIComponent(orderId)}`);
   }
 
   syncProducts() {
-    return this.request<{ synced: number; source: "mock" | "http" }>("/api/facebook-crm/products/sync", {
+    return this.request<{ synced: number; source: "mock" | "http" }>("/api/external/products/sync", {
       method: "POST"
     });
   }
 
   handleWebhookEvent(event: EcommerceWebhookEvent) {
-    return this.request<{ handled: boolean }>("/api/facebook-crm/webhooks/ecommerce", {
+    return this.request<{ handled: boolean }>("/api/external/webhooks/ecommerce", {
       method: "POST",
       body: JSON.stringify(event)
     });

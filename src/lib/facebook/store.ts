@@ -361,7 +361,8 @@ class D1FacebookStore implements FacebookStore {
       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       on conflict(external_page_id) do update set connection_id = excluded.connection_id, name = excluded.name,
       page_access_token_encrypted = excluded.page_access_token_encrypted, status = excluded.status,
-      token_status = excluded.token_status, picture_url = excluded.picture_url, synced_at = excluded.synced_at,
+      token_status = excluded.token_status, subscribed_webhook = excluded.subscribed_webhook,
+      picture_url = excluded.picture_url, synced_at = excluded.synced_at,
       updated_at = excluded.updated_at`,
       record.id,
       record.workspaceId,
