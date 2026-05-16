@@ -19,9 +19,13 @@ export function failFromError(error: unknown, fallback = "Lỗi hệ thống") {
     ? "BLOCKED_BY_MISSING_BINDING"
     : message.startsWith("BLOCKED_META_PERMISSION_MISSING")
       ? "BLOCKED_META_PERMISSION_MISSING"
+      : message.startsWith("AD_WRITE_ACTIONS_DISABLED")
+        ? "AD_WRITE_ACTIONS_DISABLED"
+      : message.startsWith("AUTO_PUBLISH_POSTS_DISABLED")
+        ? "AUTO_PUBLISH_POSTS_DISABLED"
       : message.startsWith("BLOCKED_BY_MISSING_SECRET")
       ? "BLOCKED_BY_MISSING_SECRET"
       : "INTERNAL_ERROR";
-  const status = code.startsWith("BLOCKED") ? 400 : 500;
+  const status = code.startsWith("BLOCKED") || code.endsWith("DISABLED") ? 400 : 500;
   return fail(message, status, code);
 }

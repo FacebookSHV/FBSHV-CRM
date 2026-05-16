@@ -1,11 +1,9 @@
-import { ModulePage } from "@/components/pages/module-page";
-import { moduleSummaries } from "@/lib/demo-data";
+import { CrmContent } from "@/components/crm/crm-content";
+import { listCrmCustomers } from "@/lib/crm/customers";
 
-export default function CrmPage() {
-  return (
-    <ModulePage
-      {...moduleSummaries.crm}
-      note="Khách hàng được quản lý theo workspace, tag và lịch sử tương tác."
-    />
-  );
+export const dynamic = "force-dynamic";
+
+export default async function CrmPage() {
+  const result = await listCrmCustomers();
+  return <CrmContent customers={result.customers} emptyMessage={result.emptyMessage} />;
 }

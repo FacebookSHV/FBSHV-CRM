@@ -1,4 +1,5 @@
 import { fail, failFromError, ok } from "@/lib/api-response";
+import { cancelPublishJobs } from "@/lib/content-publishing";
 import { cancelContentPost } from "@/lib/content-planner";
 
 export async function POST(
@@ -9,7 +10,7 @@ export async function POST(
   try {
     const post = await cancelContentPost(id);
     if (!post) return fail("Không tìm thấy bài viết.", 404, "CONTENT_POST_NOT_FOUND");
-    return ok({ post });
+    return ok({ post, jobs: await cancelPublishJobs(id) });
   } catch (error) {
     return failFromError(error);
   }

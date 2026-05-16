@@ -31,7 +31,7 @@ async function getPageToken(pageId: string) {
   };
 }
 
-async function postToGraph(input: PublishInput, path: "feed" | "photos") {
+async function postToGraph(input: PublishInput, path: "feed" | "photos" | "videos") {
   const page = await getPageToken(input.pageId);
   return withMetaPermission("pages_manage_posts", async () => {
     const url = new URL(graphUrl(page.graphApiVersion, `/${encodeURIComponent(page.externalPageId)}/${path}`));
@@ -39,7 +39,13 @@ async function postToGraph(input: PublishInput, path: "feed" | "photos") {
     const response = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(path === "feed" ? { message: input.message, link: input.link } : { caption: input.message, url: input.link })
+      body: JSON.stringify(
+        path === "feed"
+          ? { message: input.message, link: input.link }
+          : path === "photos"
+            ? { caption: input.message, url: input.link }
+            : { description: input.message, file_url: input.link }
+      )
     });
     const payload = (await response.json().catch(() => ({}))) as { id?: string; post_id?: string; error?: { message?: string } };
     if (!response.ok || payload.error) throw new Error(payload.error?.message || "Meta publish lỗi.");
@@ -60,4 +66,8 @@ export function createPagePost(input: PublishInput) {
 
 export function publishPhotoPost(input: PublishInput) {
   return postToGraph(input, "photos");
+}
+
+export function publishVideoPost(input: PublishInput) {
+  return postToGraph(input, "videos");
 }

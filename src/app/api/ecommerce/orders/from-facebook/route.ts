@@ -1,11 +1,20 @@
 import { fail, fromResult } from "@/lib/api-response";
 import { getEcommerceProvider } from "@/lib/ecommerce/provider";
 import { facebookOrderSchema } from "@/lib/ecommerce/validation";
+import { getProductionWriteTestDecision } from "@/lib/external-test-safety";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = facebookOrderSchema.safeParse(body);
   if (!parsed.success) return fail("Dữ liệu tạo đơn không hợp lệ");
+  const writeDecision = getProductionWriteTestDecision();
+  if (!writeDecision.shouldRun || process.env.SKU_TEST !== parsed.data.sku) {
+    return fail(
+      `Chặn tạo đơn thật vì an toàn: ${writeDecision.reasons.join(", ") || "SKU không phải SKU_TEST riêng"}.`,
+      403,
+      "EXTERNAL_WRITE_TEST_BLOCKED"
+    );
+  }
 
   const provider = getEcommerceProvider();
   const price = await provider.getSkuPrice(parsed.data.sku);

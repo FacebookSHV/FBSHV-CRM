@@ -1,10 +1,15 @@
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusPill } from "@/components/ui/status-pill";
-import { dashboardMetrics, demoProducts } from "@/lib/demo-data";
+import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { formatMoney } from "@/lib/money";
 import { PageHeader } from "../pages/page-header";
 
-export function OverviewContent() {
+type OverviewContentProps = {
+  metrics: Array<{ label: string; value: string; helper: string }>;
+  products: ProductWithInventory[];
+};
+
+export function OverviewContent({ metrics, products }: OverviewContentProps) {
   return (
     <div>
       <PageHeader
@@ -12,7 +17,7 @@ export function OverviewContent() {
         subtitle="Bảng điều khiển CRM Facebook, đơn hàng và đồng bộ sản phẩm từ Web Quản Lý TMĐT."
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {dashboardMetrics.map((metric) => (
+        {metrics.map((metric) => (
           <MetricCard key={metric.label} {...metric} />
         ))}
       </div>
@@ -24,7 +29,10 @@ export function OverviewContent() {
             </h2>
           </div>
           <div className="divide-y divide-slate-100">
-            {demoProducts.map((product) => (
+            {products.length === 0 ? (
+              <div className="p-4 text-sm text-slate-600">Chưa lấy được sản phẩm thật từ Web Quản Lý TMĐT.</div>
+            ) : null}
+            {products.map((product) => (
               <article
                 key={product.id}
                 className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center"

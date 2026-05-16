@@ -61,11 +61,24 @@ export class HttpEcommerceManagementProvider implements EcommerceManagementProvi
     );
   }
 
-  checkInventory(sku: string, quantity: number) {
-    return this.request<InventoryCheck>("/api/external/inventory/check", {
+  async checkInventory(sku: string, quantity: number) {
+    const result = await this.request<
+      Partial<InventoryCheck> & { stock?: number; reservedStock?: number; canSell?: boolean; message?: string }
+    >("/api/external/inventory/check", {
       method: "POST",
       body: JSON.stringify({ sku, quantity })
     });
+    if (!result.success) return result;
+    const availableStock = Number(result.data.availableStock ?? result.data.stock ?? 0);
+    return {
+      success: true as const,
+      data: {
+        sku: result.data.sku || sku,
+        requestedQuantity: Number(result.data.requestedQuantity ?? quantity),
+        availableStock,
+        enoughStock: Boolean(result.data.enoughStock ?? result.data.canSell ?? availableStock >= quantity)
+      }
+    };
   }
 
   reserveInventory(sku: string, quantity: number, metadata?: Record<string, unknown>) {
@@ -98,9 +111,11 @@ export class HttpEcommerceManagementProvider implements EcommerceManagementProvi
   }
 
   syncProducts() {
-    return this.request<{ synced: number; source: "mock" | "http" }>("/api/external/products/sync", {
-      method: "POST"
-    });
+    return this.getProducts({ limit: 200 }).then((result) =>
+      result.success
+        ? { success: true as const, data: { synced: result.data.length, source: "http" as const } }
+        : { success: false as const, error: result.error, code: result.code }
+    );
   }
 
   handleWebhookEvent(event: EcommerceWebhookEvent) {

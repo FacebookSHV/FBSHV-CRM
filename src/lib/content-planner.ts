@@ -1,4 +1,5 @@
 import { getD1Database } from "@/lib/db";
+import { generateAiText } from "@/lib/ai/provider";
 import { getEcommerceProvider } from "@/lib/ecommerce/provider";
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { getFacebookStore } from "@/lib/facebook/store";
@@ -36,6 +37,10 @@ export type ContentPost = {
 };
 
 export type ContentIdea = Omit<ContentPost, "status" | "externalPostId" | "error" | "updatedAt">;
+export type ContentIdeaWithAi = ContentIdea & {
+  aiMode: "ai" | "template";
+  aiNotice?: string;
+};
 
 type ContentPostRow = {
   id: string;
@@ -95,8 +100,13 @@ function productCaption(product: ProductWithInventory, template: ContentTemplate
   return `${product.name} hiện có trong danh mục Shop Huy Vân. Nhắn tin cho shop để kiểm tra tồn kho realtime và tư vấn mẫu phù hợp.`;
 }
 
-function ideaFromProduct(product: ProductWithInventory, pageId: string, template: ContentTemplate): ContentIdea {
+async function ideaFromProduct(product: ProductWithInventory, pageId: string, template: ContentTemplate): Promise<ContentIdeaWithAi> {
   const createdAt = nowIso();
+  const ai = await generateAiText({
+    task: "caption",
+    product,
+    prompt: `Tạo caption cho mẫu bài ${template}; CTA ngắn, không dùng emoji.`
+  });
   return {
     id: crypto.randomUUID(),
     workspaceId: DEFAULT_WORKSPACE_ID,
@@ -104,11 +114,13 @@ function ideaFromProduct(product: ProductWithInventory, pageId: string, template
     productSku: product.sku,
     template,
     title: `${product.name}`.slice(0, 96),
-    caption: productCaption(product, template),
+    caption: ai.text || productCaption(product, template),
     cta: "Nhắn tin cho shop",
     mediaSuggestion: product.imageUrl || "Dùng ảnh sản phẩm từ Web TMĐT",
     scheduledAt: null,
-    createdAt
+    createdAt,
+    aiMode: ai.mode,
+    aiNotice: ai.notice
   };
 }
 
@@ -121,8 +133,10 @@ export async function generateContentIdeas(limit = 7, pageId?: string) {
   const targetPageId = pageId || (await defaultPageId());
   const products = await getEcommerceProvider().getProducts({ limit });
   if (!products.success) return { success: false as const, error: products.error };
-  const ideas = products.data.slice(0, limit).map((product, index) =>
-    ideaFromProduct(product, targetPageId, CONTENT_TEMPLATES[index % CONTENT_TEMPLATES.length])
+  const ideas = await Promise.all(
+    products.data
+      .slice(0, limit)
+      .map((product, index) => ideaFromProduct(product, targetPageId, CONTENT_TEMPLATES[index % CONTENT_TEMPLATES.length]))
   );
   return { success: true as const, data: ideas };
 }

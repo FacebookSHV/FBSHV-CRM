@@ -5,6 +5,9 @@ import {
   resetContentPlannerMemoryForTests,
   scheduleContentPost
 } from "@/lib/content-planner";
+import { generateAiText } from "@/lib/ai/provider";
+import { createPublishJobs, listPublishJobs, resetContentPublishingMemoryForTests } from "@/lib/content-publishing";
+import { getAdsReadiness, publishAdDraft } from "@/lib/facebook/ads";
 import { getMemoryFacebookStoreForTests } from "@/lib/facebook/store";
 import { runPageAudit, resetPageAuditMemoryForTests } from "@/lib/page-audit";
 
@@ -14,6 +17,7 @@ describe("growth modules", () => {
     process.env.MOCK_EXTERNAL_APIS = "true";
     getMemoryFacebookStoreForTests().resetForTests();
     resetContentPlannerMemoryForTests();
+    resetContentPublishingMemoryForTests();
     resetPageAuditMemoryForTests();
     await getMemoryFacebookStoreForTests().upsertPage({
       id: "page_test_growth",
@@ -56,5 +60,47 @@ describe("growth modules", () => {
     const scheduled = await scheduleContentPost(post.id, scheduledAt);
     expect(scheduled?.id).toBe(post.id);
     expect(scheduled?.status).toBe("scheduled");
+  });
+
+  it("AI fallback ghi rõ khi thiếu key", async () => {
+    const result = await generateAiText({
+      task: "caption",
+      env: {}
+    });
+    expect(result.mode).toBe("template");
+    expect(result.needUser).toBe("NEED_USER_AI_SECRET");
+    expect(result.notice).toContain("AI chưa cấu hình");
+  });
+
+  it("publish nhiều Page tạo job riêng và chống trùng idempotency", async () => {
+    process.env.AUTO_PUBLISH_POSTS_ENABLED = "false";
+    const post = await createContentPost({
+      id: "post_publish_1",
+      pageId: "page_test_growth",
+      title: "Bài đăng nhiều Page",
+      caption: "Nội dung thật do operator nhập",
+      status: "draft"
+    });
+    const first = await createPublishJobs({
+      postId: post.id,
+      pageIds: ["page_test_growth", "page_test_second"],
+      publishNow: true
+    });
+    const second = await createPublishJobs({
+      postId: post.id,
+      pageIds: ["page_test_growth", "page_test_second"],
+      publishNow: true
+    });
+    expect(first).toHaveLength(2);
+    expect(second).toHaveLength(2);
+    expect(await listPublishJobs(post.id)).toHaveLength(2);
+    expect(first.every((job) => job.dryRun)).toBe(true);
+  });
+
+  it("Ads read-only thiếu permission trả blocked, write bị chặn bởi cờ an toàn", async () => {
+    const readiness = await getAdsReadiness();
+    expect(readiness.status).toBe("blocked");
+    expect(readiness.missingPermissions).toContain("ads_read");
+    await expect(publishAdDraft("draft_test")).rejects.toThrow("AD_WRITE_ACTIONS_DISABLED");
   });
 });

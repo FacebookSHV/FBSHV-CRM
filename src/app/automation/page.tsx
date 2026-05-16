@@ -1,11 +1,9 @@
-import { ModulePage } from "@/components/pages/module-page";
-import { moduleSummaries } from "@/lib/demo-data";
+import { AutomationContent } from "@/components/automation/automation-content";
+import { listAutomationActions, listAutomationRules } from "@/lib/automation/rules";
 
-export default function AutomationPage() {
-  return (
-    <ModulePage
-      {...moduleSummaries.automation}
-      note="Rule automation lưu hành động dự kiến, không thực hiện tác vụ ngoài khi thiếu secret."
-    />
-  );
+export const dynamic = "force-dynamic";
+
+export default async function AutomationPage() {
+  const [rules, actions] = await Promise.all([listAutomationRules(), listAutomationActions()]);
+  return <AutomationContent rules={rules} actions={actions} />;
 }

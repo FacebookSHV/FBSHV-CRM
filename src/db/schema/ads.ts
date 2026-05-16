@@ -44,3 +44,28 @@ export const adMetricDaily = sqliteTable("ad_metric_daily", {
   conversions: integer("conversions").notNull().default(0),
   roas: real("roas").notNull().default(0)
 });
+
+export const adActionsLog = sqliteTable("ad_actions_log", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  actionType: text("action_type").notNull(),
+  targetId: text("target_id"),
+  dryRun: integer("dry_run", { mode: "boolean" }).notNull().default(true),
+  status: text("status").notNull().default("blocked"),
+  error: text("error"),
+  metadataJson: text("metadata_json").notNull().default("{}"),
+  createdAt: text("created_at").notNull()
+});
+
+export const adDrafts = sqliteTable("ad_drafts", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  sourcePostId: text("source_post_id"),
+  adAccountId: text("ad_account_id"),
+  name: text("name").notNull(),
+  budgetDaily: integer("budget_daily").notNull().default(0),
+  status: text("status").notNull().default("draft"),
+  configJson: text("config_json").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull()
+});

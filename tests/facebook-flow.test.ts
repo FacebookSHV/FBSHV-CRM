@@ -105,6 +105,8 @@ describe("facebook real-flow helpers", () => {
 
   it("phát hiện số điện thoại Việt Nam trong bình luận", () => {
     expect(detectVietnamesePhone("Shop gọi em 090 123 4567 nhé")).toBe(true);
+    expect(detectVietnamesePhone("Số của em +84 97-123-4567")).toBe(true);
+    expect(detectVietnamesePhone("Liên hệ 03.1234.5678 giúp em")).toBe(true);
     expect(detectVietnamesePhone("Mã SKU ABC-12345 không phải số điện thoại")).toBe(false);
   });
 

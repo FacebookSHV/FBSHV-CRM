@@ -29,11 +29,20 @@ async function readEnvelope<T>(response: Response): Promise<ApiEnvelope<T> | nul
   return isEnvelope<T>(payload) ? payload : null;
 }
 
+function productText(value: unknown, fallback = "") {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function productNumber(value: unknown, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
 export function ProductsContent({ initialProducts }: ProductsContentProps) {
-  const [products, setProducts] = useState(initialProducts);
+  const [products, setProducts] = useState(Array.isArray(initialProducts) ? initialProducts : []);
   const [query, setQuery] = useState("");
   const [actionState, setActionState] = useState<ActionState>({
-    message: "Đang dùng dữ liệu mock an toàn khi thiếu secret TMĐT.",
+    message: "Đang dùng dữ liệu sản phẩm thật từ Web Quản Lý TMĐT.",
     tone: "info"
   });
   const [loadingSku, setLoadingSku] = useState<string | null>(null);
@@ -43,18 +52,18 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
     if (!normalized) return products;
     return products.filter(
       (product) =>
-        product.name.toLowerCase().includes(normalized) ||
-        product.sku.toLowerCase().includes(normalized)
+        productText(product.name).toLowerCase().includes(normalized) ||
+        productText(product.sku).toLowerCase().includes(normalized)
     );
   }, [products, query]);
 
   async function syncProducts() {
     setLoadingSku("sync");
     const response = await fetch("/api/ecommerce/sync-products", { method: "POST" });
-    const payload = await readEnvelope<{ synced: number; source: string }>(response);
+    const payload = await readEnvelope<{ synced: number; cached?: number; source: string; d1?: boolean }>(response);
     if (response.ok && payload?.success) {
       setActionState({
-        message: `Đã đồng bộ ${payload.data.synced} sản phẩm từ nguồn ${payload.data.source}.`,
+        message: `Đã đồng bộ ${payload.data.synced} sản phẩm từ Web TMĐT${payload.data.d1 ? " và cache vào D1" : ""}.`,
         tone: "success"
       });
       const productsResponse = await fetch("/api/ecommerce/products");
@@ -145,11 +154,11 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
       <div className="grid gap-3 lg:hidden">
         {visibleProducts.map((product) => (
           <ProductCard
-            key={product.id}
+            key={productText(product.id, productText(product.sku))}
             product={product}
-            loading={loadingSku === product.sku}
-            onPrice={() => checkPrice(product.sku)}
-            onInventory={() => checkInventory(product.sku)}
+            loading={loadingSku === productText(product.sku)}
+            onPrice={() => checkPrice(productText(product.sku))}
+            onInventory={() => checkInventory(productText(product.sku))}
           />
         ))}
       </div>
@@ -166,24 +175,24 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {visibleProducts.map((product) => (
-              <tr key={product.id}>
+              <tr key={productText(product.id, productText(product.sku))}>
                 <td className="px-4 py-3">
-                  <Link href={`/products/${product.id}`} className="font-semibold text-ink hover:text-brand-700">
-                    {product.name}
+                  <Link href={`/products/${encodeURIComponent(productText(product.id, productText(product.sku)))}`} className="font-semibold text-ink hover:text-brand-700">
+                    {productText(product.name, "Chưa có tên sản phẩm")}
                   </Link>
-                  <div className="text-xs text-slate-500">SKU {product.sku}</div>
+                  <div className="text-xs text-slate-500">SKU {productText(product.sku, "chưa có")}</div>
                 </td>
-                <td className="px-4 py-3">{formatMoney(product.currentPrice)}</td>
+                <td className="px-4 py-3">{formatMoney(product.currentPrice, product.currency)}</td>
                 <td className="px-4 py-3">
-                  {product.availableStock}/{product.stock}
+                  {productNumber(product.availableStock)}/{productNumber(product.stock)}
                 </td>
                 <td className="px-4 py-3">
                   <ProductStatus product={product} />
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
-                    <ActionButton icon={<Tag />} label="Kiểm giá" onClick={() => checkPrice(product.sku)} />
-                    <ActionButton icon={<ShieldCheck />} label="Kiểm tồn" onClick={() => checkInventory(product.sku)} />
+                    <ActionButton icon={<Tag />} label="Kiểm giá" onClick={() => checkPrice(productText(product.sku))} />
+                    <ActionButton icon={<ShieldCheck />} label="Kiểm tồn" onClick={() => checkInventory(productText(product.sku))} />
                   </div>
                 </td>
               </tr>
@@ -197,7 +206,7 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
 
 function ProductStatus({ product }: { product: ProductWithInventory }) {
   if (product.status === "inactive") return <StatusPill tone="neutral">Ngưng bán</StatusPill>;
-  if (product.availableStock <= product.lowStockThreshold) return <StatusPill tone="warning">Tồn thấp</StatusPill>;
+  if (productNumber(product.availableStock) <= productNumber(product.lowStockThreshold, 10)) return <StatusPill tone="warning">Tồn thấp</StatusPill>;
   return <StatusPill tone="success">Đang bán</StatusPill>;
 }
 
@@ -234,21 +243,21 @@ function ProductCard({ product, loading, onPrice, onInventory }: ProductCardProp
     <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <Link href={`/products/${product.id}`} className="font-semibold text-ink">
-            {product.name}
+          <Link href={`/products/${encodeURIComponent(productText(product.id, productText(product.sku)))}`} className="font-semibold text-ink">
+            {productText(product.name, "Chưa có tên sản phẩm")}
           </Link>
-          <div className="mt-1 text-xs text-slate-500">SKU {product.sku}</div>
+          <div className="mt-1 text-xs text-slate-500">SKU {productText(product.sku, "chưa có")}</div>
         </div>
         <ProductStatus product={product} />
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-md bg-slate-50 p-3">
           <div className="text-xs text-slate-500">Giá hiện tại</div>
-          <div className="mt-1 font-semibold text-ink">{formatMoney(product.currentPrice)}</div>
+          <div className="mt-1 font-semibold text-ink">{formatMoney(product.currentPrice, product.currency)}</div>
         </div>
         <div className="rounded-md bg-slate-50 p-3">
           <div className="text-xs text-slate-500">Tồn khả dụng</div>
-          <div className="mt-1 font-semibold text-ink">{product.availableStock}</div>
+          <div className="mt-1 font-semibold text-ink">{productNumber(product.availableStock)}</div>
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
