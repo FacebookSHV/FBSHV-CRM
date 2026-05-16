@@ -36,7 +36,7 @@ Các module Facebook nằm trong `src/lib/facebook/*`:
 - `store.ts`: dùng D1 binding `DB` khi chạy Cloudflare; local/mock mới dùng memory store.
 - `operations.ts`: OAuth callback, subscribe page, webhook upsert, gửi tin nhắn, trả lời/ẩn comment.
 
-OAuth scope đang xin cho CRM gồm Page, Messenger, comment và ad account: `pages_show_list`, `pages_manage_metadata`, `pages_messaging`, `pages_read_engagement`, `pages_manage_engagement`, `business_management`, `ads_read`, `ads_management`. Các quyền quảng cáo cần user là admin/tester của app trong dev-mode hoặc được Meta duyệt khi đưa app ra public.
+OAuth scope hiện tại chỉ xin quyền tối thiểu để liệt kê Page và đọc engagement: `pages_show_list`, `pages_manage_metadata`, `pages_read_engagement`. Các quyền Messenger, comment nâng cao hoặc tài khoản quảng cáo sẽ chỉ thêm sau khi Meta App Review và asset permission đã sẵn sàng.
 
 Real-mode đặt:
 

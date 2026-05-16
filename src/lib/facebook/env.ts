@@ -10,11 +10,13 @@ function isMissing(value?: string) {
   );
 }
 
+const DEFAULT_CRM_APP_URL = "https://fbshv-crm.ngchihuy.workers.dev";
+
 export function getFacebookRuntimeConfig(
   env: Record<string, string | undefined> = process.env
 ): FacebookRuntimeConfig {
   const mode = env.MOCK_EXTERNAL_APIS === "false" ? "real" : "mock";
-  const crmAppUrl = env.CRM_APP_URL || env.APP_BASE_URL || env.APP_URL || "http://localhost:3000";
+  const crmAppUrl = env.CRM_APP_URL || env.APP_BASE_URL || env.APP_URL || DEFAULT_CRM_APP_URL;
   const graphApiVersion = env.META_GRAPH_API_VERSION || "v20.0";
   const redirectUri = env.META_REDIRECT_URI || `${crmAppUrl.replace(/\/$/, "")}/api/facebook/callback`;
   const verifyToken = env.META_VERIFY_TOKEN || "mock_verify_token";

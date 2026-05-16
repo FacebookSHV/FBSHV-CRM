@@ -38,7 +38,7 @@ const warnings = [];
 const errors = [];
 
 if (isMissing(env.AUTH_SECRET)) warnings.push("AUTH_SECRET đang thiếu, chỉ phù hợp local/mock.");
-if (isMissing(env.CRM_APP_URL) && isMissing(env.APP_BASE_URL)) warnings.push("Thiếu CRM_APP_URL/APP_BASE_URL, local sẽ dùng http://localhost:3000.");
+if (isMissing(env.CRM_APP_URL) && isMissing(env.APP_BASE_URL)) warnings.push("Thiếu CRM_APP_URL/APP_BASE_URL, app sẽ dùng https://fbshv-crm.ngchihuy.workers.dev.");
 if (mockEcommerce) warnings.push("MOCK_ECOMMERCE_API đang bật, Product Sync dùng mock provider.");
 if (mockExternal) warnings.push("MOCK_EXTERNAL_APIS đang bật, Facebook dùng mock provider.");
 

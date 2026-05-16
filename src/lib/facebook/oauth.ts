@@ -3,12 +3,7 @@ import type { FacebookRuntimeConfig } from "./types";
 export const FACEBOOK_OAUTH_SCOPES = [
   "pages_show_list",
   "pages_manage_metadata",
-  "pages_messaging",
-  "pages_read_engagement",
-  "pages_manage_engagement",
-  "business_management",
-  "ads_read",
-  "ads_management"
+  "pages_read_engagement"
 ];
 
 export function buildFacebookOAuthUrl(config: FacebookRuntimeConfig, state: string) {

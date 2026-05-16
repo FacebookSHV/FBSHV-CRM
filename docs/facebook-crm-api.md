@@ -393,28 +393,23 @@ OAuth scopes xin khi connect Facebook:
 ```text
 pages_show_list
 pages_manage_metadata
-pages_messaging
 pages_read_engagement
-pages_manage_engagement
-business_management
-ads_read
-ads_management
 ```
 
-`ads_read`, `ads_management` và `business_management` dùng cho luồng tài khoản quảng cáo. Khi app còn dev-mode, tài khoản đăng nhập cần là admin/developer/tester của app và có quyền trên Business/ad account. Khi đưa app ra production public, các quyền quảng cáo có thể cần Meta App Review.
+CRM hiện chỉ xin scope tối thiểu. Các quyền Messenger/comment nâng cao hoặc tài khoản quảng cáo sẽ được thêm sau khi Meta App Review và asset permission đã sẵn sàng.
 
 Env real-mode:
 
 ```env
 AUTH_SECRET=""
 ENCRYPTION_KEY=""
-CRM_APP_URL=""
-APP_BASE_URL=""
-META_APP_ID=""
+CRM_APP_URL="https://fbshv-crm.ngchihuy.workers.dev"
+APP_BASE_URL="https://fbshv-crm.ngchihuy.workers.dev"
+META_APP_ID="1296077039298909"
 META_APP_SECRET=""
 META_VERIFY_TOKEN=""
 META_GRAPH_API_VERSION="v20.0"
-META_REDIRECT_URI="<CRM_APP_URL>/api/facebook/callback"
+META_REDIRECT_URI="https://fbshv-crm.ngchihuy.workers.dev/api/facebook/callback"
 MOCK_EXTERNAL_APIS="false"
 ECOMMERCE_API_BASE_URL="https://huyvan-worker-api.nghiemchihuy.workers.dev"
 ECOMMERCE_API_KEY=""

@@ -83,10 +83,8 @@ describe("facebook real-flow helpers", () => {
     await expect(response.text()).resolves.toBe("abc123");
   });
 
-  it("OAuth xin quyền page, messenger, comment và tài khoản quảng cáo", () => {
-    expect(FACEBOOK_OAUTH_SCOPES).toEqual(
-      expect.arrayContaining(["pages_messaging", "pages_manage_engagement", "business_management", "ads_read", "ads_management"])
-    );
+  it("OAuth chỉ xin quyền tối thiểu cho Page discovery và đọc engagement", () => {
+    expect(FACEBOOK_OAUTH_SCOPES).toEqual(["pages_show_list", "pages_manage_metadata", "pages_read_engagement"]);
   });
 
   it("parse Messenger message", () => {
