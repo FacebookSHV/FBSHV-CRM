@@ -151,3 +151,17 @@ export async function listContentMedia(postId: string) {
     createdAt: row.created_at
   }));
 }
+
+export async function deleteContentMediaForPost(postId: string) {
+  const media = await listContentMedia(postId);
+  const bucket = await getBucket();
+  if (bucket) {
+    await Promise.all(media.filter((item) => item.r2Key).map((item) => bucket.delete(item.r2Key!)));
+  }
+
+  const db = await getD1Database();
+  if (!db) return { deleted: media.length };
+  // NEO: Xóa draft/scheduled phải dọn cả metadata media để R2 không tích rác test.
+  const result = await db.prepare("delete from content_media where post_id = ?").bind(postId).run();
+  return { deleted: result.meta.changes ?? media.length };
+}

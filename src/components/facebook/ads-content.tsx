@@ -1,0 +1,106 @@
+"use client";
+
+import { PlugZap, RefreshCcw, ShieldAlert } from "lucide-react";
+import { useState } from "react";
+import { PageHeader } from "@/components/pages/page-header";
+import { StatusPill } from "@/components/ui/status-pill";
+
+type AdsReadiness = {
+  status: "blocked" | "ready" | "empty";
+  missingPermissions: string[];
+  writeActionsEnabled: boolean;
+  accounts: Array<{ id: string; externalAccountId: string; name: string; status: string }>;
+};
+
+type ApiEnvelope<T> = { success: true; data: T } | { success: false; error?: string; code?: string };
+
+const requiredRead = ["business_management", "ads_read"];
+const requiredWrite = ["ads_management"];
+
+export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadiness }) {
+  const [readiness, setReadiness] = useState(initialReadiness);
+  const [status, setStatus] = useState("Ads chỉ đọc account thật từ Meta, không hiển thị ad account giả.");
+
+  async function refreshAccounts() {
+    const response = await fetch("/api/ads/accounts", { method: "POST" });
+    const payload = (await response.json().catch(() => null)) as ApiEnvelope<{ synced: number; accounts: AdsReadiness }> | null;
+    if (response.ok && payload?.success) {
+      setReadiness(payload.data.accounts);
+      setStatus(`Đã cache ${payload.data.synced} ad account thật từ Meta.`);
+    } else {
+      setStatus(payload && !payload.success ? payload.error ?? "Kiểm Ads account lỗi." : "Kiểm Ads account lỗi.");
+    }
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title="Facebook Ads"
+        subtitle="Kết nối và kiểm ad account thật ở chế độ read-only; mọi Ads write vẫn bị chặn nếu chưa bật cờ an toàn."
+        action={
+          <div className="flex gap-2">
+            <a
+              href="/api/facebook/connect?intent=ads"
+              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-brand-600 px-3 text-sm font-semibold text-white focus-ring"
+            >
+              <PlugZap className="h-4 w-4" aria-hidden="true" />
+              Connect Ads Account
+            </a>
+            <button type="button" onClick={() => void refreshAccounts()} className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 focus-ring" aria-label="Kiểm tra lại Ads" title="Kiểm tra lại Ads">
+              <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        }
+      />
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-soft">
+        <StatusPill tone={readiness.status === "ready" ? "success" : "warning"}>{readiness.status}</StatusPill>
+        <span className="text-sm text-slate-600">{status}</span>
+      </div>
+
+      <section className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-ink">Trạng thái Ads account</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              {readiness.status === "blocked"
+                ? `Thiếu quyền ${readiness.missingPermissions.join(", ")} nên chưa gọi Ads Graph API.`
+                : readiness.status === "empty"
+                  ? "Đã có quyền đọc nhưng chưa cache được ad account thật trong CRM."
+                  : "Đã cache ad account thật ở chế độ read-only."}
+            </p>
+          </div>
+          <StatusPill tone={readiness.writeActionsEnabled ? "warning" : "success"}>
+            {readiness.writeActionsEnabled ? "Write cần ads_management" : "Ads write đang chặn"}
+          </StatusPill>
+        </div>
+      </section>
+
+      {readiness.accounts.length > 0 ? (
+        <section className="mt-4 grid gap-3 md:grid-cols-2">
+          {readiness.accounts.map((account) => (
+            <article key={account.id} className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+              <h3 className="text-sm font-semibold text-ink">{account.name}</h3>
+              <p className="mt-1 text-xs text-slate-500">{account.externalAccountId}</p>
+              <div className="mt-3"><StatusPill tone="info">{account.status}</StatusPill></div>
+            </article>
+          ))}
+        </section>
+      ) : null}
+
+      <section className="mt-4 grid gap-3 md:grid-cols-3">
+        {[...requiredRead, ...requiredWrite].map((scope) => (
+          <article key={scope} className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+            <ShieldAlert className="h-5 w-5 text-brand-600" aria-hidden="true" />
+            <h3 className="mt-3 text-sm font-semibold text-ink">{scope}</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              {scope === "ads_management"
+                ? "Chỉ dùng cho thao tác ghi Ads, hiện vẫn bị chặn bởi AD_WRITE_ACTIONS_ENABLED."
+                : "Cần cho Connect Ads Account và đọc danh sách ad account thật."}
+            </p>
+          </article>
+        ))}
+      </section>
+    </div>
+  );
+}

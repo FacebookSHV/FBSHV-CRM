@@ -2,7 +2,7 @@ export const dashboardMetrics = [
   { label: "Doanh thu hôm nay", value: "12,8 triệu", helper: "+18% so với hôm qua" },
   { label: "Hội thoại cần xử lý", value: "23", helper: "7 hội thoại ưu tiên cao" },
   { label: "Đơn chờ xác nhận", value: "14", helper: "Đã kiểm tồn realtime" },
-  { label: "ROAS quảng cáo", value: "4,2x", helper: "Theo dữ liệu mock 7 ngày" }
+  { label: "ROAS quảng cáo", value: "4,2x", helper: "Theo dữ liệu kiểm thử 7 ngày" }
 ];
 
 export const demoProducts = [
@@ -19,7 +19,7 @@ export const demoProducts = [
     discountPercent: 16.7,
     currency: "VND",
     imageUrl: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64",
-    description: "Sản phẩm mock dùng để kiểm tra đồng bộ, giá SKU và tồn kho.",
+    description: "Sản phẩm kiểm thử dùng để kiểm tra đồng bộ, giá SKU và tồn kho.",
     status: "active",
     stock: 100,
     availableStock: 92,
@@ -108,7 +108,7 @@ export const moduleSummaries = {
   settings: {
     title: "Cài đặt",
     subtitle: "Quản lý tích hợp Facebook, Telegram, Zalo, TMĐT và secret placeholder.",
-    rows: ["Facebook mock", "Telegram mock", "Web Quản Lý TMĐT mock"]
+    rows: ["Facebook/Meta status", "AI Providers", "Web Quản Lý TMĐT status"]
   },
   auditLogs: {
     title: "Audit Log",

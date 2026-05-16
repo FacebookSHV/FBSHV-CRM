@@ -165,7 +165,7 @@ export function InboxContent() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-soft">
-        <StatusPill tone={mode === "mock" ? "warning" : "success"}>{mode === "mock" ? "Facebook mock" : "Facebook real"}</StatusPill>
+        <StatusPill tone={mode === "mock" ? "warning" : "success"}>{mode === "mock" ? "Facebook chưa kết nối thật" : "Facebook real"}</StatusPill>
         <StatusPill tone="info">Ecommerce qua provider</StatusPill>
         {status ? <span className="text-sm text-slate-600">{status}</span> : null}
       </div>

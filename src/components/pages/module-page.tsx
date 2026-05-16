@@ -15,7 +15,7 @@ export function ModulePage({ title, subtitle, rows, note }: ModulePageProps) {
       <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
         <section className="rounded-md border border-slate-200 bg-white shadow-soft">
           <div className="border-b border-slate-200 px-4 py-3">
-            <h2 className="text-sm font-semibold text-ink">Danh sách demo</h2>
+            <h2 className="text-sm font-semibold text-ink">Danh sách module</h2>
           </div>
           <div className="divide-y divide-slate-100">
             {rows.map((row, index) => (
@@ -30,7 +30,7 @@ export function ModulePage({ title, subtitle, rows, note }: ModulePageProps) {
                   </div>
                 </div>
                 <StatusPill tone={index === 0 ? "success" : "neutral"}>
-                  {index === 0 ? "Đang hoạt động" : "Mock"}
+                  {index === 0 ? "Đang hoạt động" : "Chưa kết nối"}
                 </StatusPill>
               </article>
             ))}
@@ -40,8 +40,7 @@ export function ModulePage({ title, subtitle, rows, note }: ModulePageProps) {
           <h2 className="text-sm font-semibold text-ink">Trạng thái tích hợp</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">{note}</p>
           <div className="mt-4 rounded-md bg-slate-50 p-3 text-sm text-slate-600">
-            Mock/fallback đang bật để app không phụ thuộc secret thật trong lúc
-            dựng MVP.
+            Dữ liệu mô phỏng chỉ dùng khi chưa cấu hình kết nối thật trong môi trường hiện tại.
           </div>
         </section>
       </div>

@@ -3,6 +3,7 @@
 import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
+import { ProductSearchPicker } from "@/components/products/product-search-picker";
 import { StatusPill } from "@/components/ui/status-pill";
 
 type AiAssistantContentProps = {
@@ -16,23 +17,22 @@ const templates = {
 };
 
 export function AiAssistantContent({ products }: AiAssistantContentProps) {
-  const [sku, setSku] = useState(products[0]?.sku ?? "");
+  const [selectedProduct, setSelectedProduct] = useState<ProductWithInventory | null>(products[0] ?? null);
   const [mode, setMode] = useState<keyof typeof templates>("caption");
   const [result, setResult] = useState("Chọn sản phẩm và loại nội dung để tạo bản nháp.");
   const [notice, setNotice] = useState("AI chưa gọi.");
   const [loading, setLoading] = useState(false);
-  const selected = products.find((product) => product.sku === sku);
 
   async function generate() {
-    if (!selected) {
-      setNotice("Chưa có sản phẩm thật để tạo nội dung.");
+    if (!selectedProduct) {
+      setNotice("Chưa chọn sản phẩm thật từ Web Quản Lý TMĐT.");
       return;
     }
     setLoading(true);
     const response = await fetch("/api/ai/generate", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ task: mode, productSku: selected.sku, prompt: templates[mode] })
+      body: JSON.stringify({ task: mode, productSku: selectedProduct.sku, prompt: templates[mode] })
     });
     const payload = (await response.json().catch(() => null)) as
       | { success: true; data: { mode: "ai" | "template"; provider: string; text: string; notice?: string } }
@@ -40,7 +40,7 @@ export function AiAssistantContent({ products }: AiAssistantContentProps) {
       | null;
     if (response.ok && payload?.success) {
       setResult(payload.data.text);
-      setNotice(payload.data.notice || `AI thật: ${payload.data.provider}`);
+      setNotice(payload.data.notice || (payload.data.mode === "ai" ? `AI thật: ${payload.data.provider}` : "AI chưa cấu hình - dùng template an toàn."));
     } else {
       setNotice(payload && !payload.success ? payload.error ?? "Tạo nội dung lỗi." : "Tạo nội dung lỗi.");
     }
@@ -56,25 +56,17 @@ export function AiAssistantContent({ products }: AiAssistantContentProps) {
         </p>
       </div>
       <div className="mb-4">
-        <StatusPill tone={notice.includes("thật") ? "success" : "warning"}>{notice}</StatusPill>
+        <StatusPill tone={notice.includes("AI thật") ? "success" : "warning"}>{notice}</StatusPill>
       </div>
       <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
-          <div className="grid gap-3">
-            <label>
-              <span className="text-sm font-medium text-slate-700">Sản phẩm</span>
-              <select
-                value={sku}
-                onChange={(event) => setSku(event.target.value)}
-                className="mt-1 min-h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus-ring"
-              >
-                {products.map((product) => (
-                  <option key={product.sku} value={product.sku}>
-                    {product.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="grid gap-4">
+            <ProductSearchPicker
+              label="Tìm và chọn sản phẩm"
+              initialProducts={products}
+              selectedSku={selectedProduct?.sku}
+              onSelect={setSelectedProduct}
+            />
             <div>
               <span className="text-sm font-medium text-slate-700">Loại nội dung</span>
               <div className="mt-2 grid grid-cols-3 gap-2">
@@ -98,8 +90,8 @@ export function AiAssistantContent({ products }: AiAssistantContentProps) {
             <button
               type="button"
               onClick={generate}
-              disabled={loading || products.length === 0}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white focus-ring hover:bg-brand-700"
+              disabled={loading || !selectedProduct}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white focus-ring hover:bg-brand-700 disabled:opacity-50"
             >
               <Sparkles className="h-4 w-4" aria-hidden="true" />
               {loading ? "Đang tạo" : "Tạo bản nháp"}
@@ -110,7 +102,7 @@ export function AiAssistantContent({ products }: AiAssistantContentProps) {
           <h2 className="text-sm font-semibold text-ink">Kết quả</h2>
           <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{result}</p>
           <p className="mt-4 text-xs leading-5 text-slate-500">
-            Nếu thiếu GEMINI_API_KEY hoặc OPENAI_API_KEY, hệ thống ghi rõ đang dùng template fallback.
+            Multi-key failover sẽ thử GEMINI_API_KEY_1 đến GEMINI_API_KEY_5 rồi OpenAI nếu đã cấu hình.
           </p>
         </section>
       </div>

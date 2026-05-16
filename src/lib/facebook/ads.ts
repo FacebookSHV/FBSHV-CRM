@@ -1,6 +1,8 @@
 import { getD1Database } from "@/lib/db";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
 import { blockedMetaPermission } from "./permissions";
+import { getFacebookRuntimeConfig } from "./env";
+import { decryptToken } from "./token-crypto";
 
 export type AdsReadiness = {
   status: "blocked" | "ready" | "empty";
@@ -15,6 +17,11 @@ type AccountRow = {
   external_account_id: string;
   name: string;
   status: string;
+};
+
+type ConnectionTokenRow = {
+  access_token_encrypted: string;
+  scopes: string;
 };
 
 type CampaignRow = {
@@ -42,6 +49,15 @@ async function currentScopes() {
     .flatMap((row) => row.scopes.split(","))
     .map((scope) => scope.trim())
     .filter(Boolean);
+}
+
+async function latestConnection() {
+  const db = await getD1Database();
+  if (!db) return null;
+  return db
+    .prepare("select access_token_encrypted, scopes from facebook_connections where workspace_id = ? and status = 'active' order by updated_at desc limit 1")
+    .bind(DEFAULT_WORKSPACE_ID)
+    .first<ConnectionTokenRow>();
 }
 
 function missing(scopes: string[], required: string[]) {
@@ -91,6 +107,51 @@ export async function getAdsReadiness(options: { strict?: boolean } = {}): Promi
     writeActionsEnabled: process.env.AD_WRITE_ACTIONS_ENABLED === "true",
     accounts
   };
+}
+
+export async function syncAdAccountsFromMeta() {
+  const readiness = await getAdsReadiness({ strict: true });
+  void readiness;
+  const db = await getD1Database();
+  if (!db) throw new Error("BLOCKED_BY_MISSING_BINDING: DB");
+  const config = getFacebookRuntimeConfig();
+  if (config.mode !== "real") throw blockedMetaPermission("ads_read,business_management");
+  const connection = await latestConnection();
+  if (!connection) throw blockedMetaPermission("ads_read,business_management");
+  const token = await decryptToken(connection.access_token_encrypted, config.encryptionKey);
+
+  const url = new URL(`https://graph.facebook.com/${config.graphApiVersion}/me/adaccounts`);
+  url.searchParams.set("fields", "id,name,account_status");
+  url.searchParams.set("limit", "50");
+  url.searchParams.set("access_token", token);
+  const response = await fetch(url);
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: Array<{ id?: string; name?: string; account_status?: number | string }>;
+    error?: { message?: string };
+  };
+  if (!response.ok || payload.error) throw new Error(payload.error?.message || "Meta Ads API trả lỗi.");
+
+  const now = nowIso();
+  const accounts = (payload.data ?? []).filter((item) => item.id && item.name);
+  for (const account of accounts) {
+    // NEO: Ad account chỉ cache khi Meta Graph trả dữ liệu thật, không tạo account giả trong CRM.
+    await db
+      .prepare(
+        `insert into ad_accounts (id, workspace_id, external_account_id, name, status)
+         values (?, ?, ?, ?, ?)
+         on conflict(id) do update set name = excluded.name, status = excluded.status`
+      )
+      .bind(
+        account.id!,
+        DEFAULT_WORKSPACE_ID,
+        account.id!,
+        account.name!,
+        String(account.account_status ?? "active")
+      )
+      .run();
+  }
+
+  return { synced: accounts.length, updatedAt: now, accounts: await getAdsReadiness() };
 }
 
 export async function listAdCampaigns() {

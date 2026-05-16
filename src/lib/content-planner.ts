@@ -1,5 +1,6 @@
 import { getD1Database } from "@/lib/db";
 import { generateAiText } from "@/lib/ai/provider";
+import { deleteContentMediaForPost } from "@/lib/content-media";
 import { getEcommerceProvider } from "@/lib/ecommerce/provider";
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { getFacebookStore } from "@/lib/facebook/store";
@@ -210,6 +211,28 @@ export async function updateContentPost(id: string, patch: Partial<ContentPost>)
   const current = (await listContentPosts()).find((post) => post.id === id);
   if (!current) return null;
   return createContentPost({ ...current, ...patch, id, createdAt: current.createdAt });
+}
+
+export async function deleteContentPost(id: string) {
+  const current = (await listContentPosts()).find((post) => post.id === id);
+  if (!current) return { deleted: false as const, error: "CONTENT_POST_NOT_FOUND" };
+  if (current.status !== "draft" && current.status !== "scheduled") {
+    return { deleted: false as const, error: "CONTENT_POST_DELETE_NOT_ALLOWED" };
+  }
+
+  const db = await getD1Database();
+  if (!db) {
+    memoryPosts.delete(id);
+    return { deleted: true as const };
+  }
+
+  // NEO: Chỉ xóa draft/scheduled trong CRM; không tự xóa bài đã publish trên Meta.
+  await db.prepare("delete from content_publish_jobs where post_id = ?").bind(id).run();
+  await db.prepare("delete from content_publish_logs where post_id = ?").bind(id).run();
+  await db.prepare("delete from content_post_targets where post_id = ?").bind(id).run();
+  await deleteContentMediaForPost(id);
+  await db.prepare("delete from content_posts where id = ?").bind(id).run();
+  return { deleted: true as const };
 }
 
 export function buildCalendarSuggestions(days = 7) {

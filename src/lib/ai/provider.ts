@@ -1,5 +1,6 @@
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { formatMoney } from "@/lib/money";
+import { listAiRuntimeKeys, type AiRuntimeKey } from "@/lib/settings/ai-keys";
 
 export type AiTask = "caption" | "inbox" | "script" | "calendar" | "audit" | "hashtags";
 
@@ -14,6 +15,7 @@ export type AiGenerationResult = {
 type AiConfig = {
   provider: "gemini" | "openai" | "template";
   apiKey?: string;
+  keyName?: string;
   model?: string;
   missing: string[];
 };
@@ -28,17 +30,18 @@ function firstPresent(env: Record<string, string | undefined>, keys: string[]) {
 
 export function getAiConfig(env: Record<string, string | undefined> = process.env): AiConfig {
   const gemini = firstPresent(env, [
-    "GEMINI_API_KEY",
     "GEMINI_API_KEY_1",
     "GEMINI_API_KEY_2",
     "GEMINI_API_KEY_3",
     "GEMINI_API_KEY_4",
-    "GEMINI_API_KEY_5"
+    "GEMINI_API_KEY_5",
+    "GEMINI_API_KEY"
   ]);
   if (gemini) {
     return {
       provider: "gemini",
       apiKey: gemini.value,
+      keyName: gemini.key,
       model: env.GEMINI_MODEL || "gemini-1.5-flash",
       missing: []
     };
@@ -49,6 +52,7 @@ export function getAiConfig(env: Record<string, string | undefined> = process.en
     return {
       provider: "openai",
       apiKey: openai.value,
+      keyName: openai.key,
       model: env.OPENAI_MODEL || "gpt-4o-mini",
       missing: []
     };
@@ -57,6 +61,16 @@ export function getAiConfig(env: Record<string, string | undefined> = process.en
   return {
     provider: "template",
     missing: ["GEMINI_API_KEY", "OPENAI_API_KEY"]
+  };
+}
+
+function configFromRuntimeKey(key: AiRuntimeKey, env: Record<string, string | undefined>): AiConfig {
+  return {
+    provider: key.provider,
+    apiKey: key.value,
+    keyName: key.keyName,
+    model: key.provider === "gemini" ? env.GEMINI_MODEL || "gemini-1.5-flash" : env.OPENAI_MODEL || "gpt-4o-mini",
+    missing: []
   };
 }
 
@@ -150,33 +164,40 @@ export async function generateAiText(input: {
   prompt?: string;
   env?: Record<string, string | undefined>;
 }): Promise<AiGenerationResult> {
-  const config = getAiConfig(input.env);
+  const env = input.env ?? process.env;
+  const runtimeKeys = await listAiRuntimeKeys(env);
   const template = fallbackText(input.task, input.product, input.prompt);
-  if (config.provider === "template" || !config.apiKey) {
+  if (runtimeKeys.length === 0) {
     return {
       mode: "template",
       provider: "template",
       text: template,
-      notice: "AI chưa cấu hình - đang dùng template fallback",
+      notice: "AI chưa cấu hình - đang dùng template an toàn",
       needUser: "NEED_USER_AI_SECRET"
     };
   }
 
-  try {
-    const prompt = buildPrompt(input.task, input.product, input.prompt);
-    const text = config.provider === "gemini" ? await callGemini(config, prompt) : await callOpenAi(config, prompt);
-    return {
-      mode: "ai",
-      provider: config.provider,
-      text: text || template
-    };
-  } catch {
-    return {
-      mode: "template",
-      provider: "template",
-      text: template,
-      notice: "AI gọi lỗi - đang dùng template fallback",
-      needUser: "NEED_USER_AI_SECRET"
-    };
+  const prompt = buildPrompt(input.task, input.product, input.prompt);
+  for (const key of runtimeKeys) {
+    const config = configFromRuntimeKey(key, env);
+    try {
+      const text = config.provider === "gemini" ? await callGemini(config, prompt) : await callOpenAi(config, prompt);
+      return {
+        mode: "ai",
+        provider: config.provider,
+        text: text || template,
+        notice: key.source === "settings" ? `AI thật: ${config.provider} (${key.keyName})` : undefined
+      };
+    } catch {
+      // NEO: Failover AI chạy sang key tiếp theo khi key hiện tại lỗi hoặc hết quota.
+    }
   }
+
+  return {
+    mode: "template",
+    provider: "template",
+    text: template,
+    notice: `AI key lỗi hoặc hết quota - đã thử ${runtimeKeys.length} key và dùng template an toàn.`,
+    needUser: "NEED_USER_AI_SECRET"
+  };
 }

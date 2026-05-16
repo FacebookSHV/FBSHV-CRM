@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { fail } from "@/lib/api-response";
 import { assertFacebookReady, getFacebookRuntimeConfig } from "@/lib/facebook/env";
-import { createOAuthState, buildFacebookOAuthUrl } from "@/lib/facebook/oauth";
+import { buildFacebookOAuthUrl, createOAuthState, scopesForOAuthIntent } from "@/lib/facebook/oauth";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
 
 export async function GET(request: Request) {
   const config = getFacebookRuntimeConfig();
-  const state = createOAuthState(DEFAULT_WORKSPACE_ID);
+  const url = new URL(request.url);
+  const intent = url.searchParams.get("intent") === "ads" ? "ads" as const : "base" as const;
+  const state = createOAuthState(DEFAULT_WORKSPACE_ID, intent);
 
   if (config.mode === "mock") {
     const callback = new URL("/api/facebook/callback", request.url);
@@ -19,5 +21,5 @@ export async function GET(request: Request) {
   if (!readiness.ok) return fail(readiness.error, 400, "BLOCKED_BY_MISSING_SECRET");
 
   // NEO: OAuth thật chỉ chạy khi đủ Meta env, không tự bịa token production.
-  return NextResponse.redirect(buildFacebookOAuthUrl(config, state));
+  return NextResponse.redirect(buildFacebookOAuthUrl(config, state, scopesForOAuthIntent(intent)));
 }

@@ -1,6 +1,6 @@
 import { createFacebookClient } from "./client";
 import { assertFacebookReady, getFacebookRuntimeConfig } from "./env";
-import { FACEBOOK_OAUTH_SCOPES } from "./oauth";
+import { intentFromOAuthState, scopesForOAuthIntent } from "./oauth";
 import { createMockEncryptedToken, decryptToken, encryptToken } from "./token-crypto";
 import type {
   CommentRecord,
@@ -35,6 +35,7 @@ export async function connectFacebookFromCode(code: string, state?: string) {
   const now = nowIso();
   const store = await getFacebookStore();
   const workspaceId = state?.startsWith("workspace:") ? state.split(":")[1] || DEFAULT_WORKSPACE_ID : DEFAULT_WORKSPACE_ID;
+  const requestedScopes = scopesForOAuthIntent(intentFromOAuthState(state));
   const connectionId = config.mode === "mock" ? "conn_mock" : crypto.randomUUID();
   const accessTokenEncrypted =
     config.mode === "mock" ? createMockEncryptedToken("user") : await encryptToken(token.accessToken, config.encryptionKey);
@@ -47,7 +48,7 @@ export async function connectFacebookFromCode(code: string, state?: string) {
     accessTokenEncrypted,
     tokenExpiresAt: token.expiresAt,
     // NEO: Quyền quảng cáo nằm chung OAuth để quản lý ad account sau khi Meta duyệt scope.
-    scopes: FACEBOOK_OAUTH_SCOPES.join(","),
+    scopes: requestedScopes.join(","),
     status: config.mode === "mock" ? "mock" : "active",
     createdAt: now,
     updatedAt: now
