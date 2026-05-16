@@ -32,7 +32,11 @@ export function ProductSearchPicker({
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState<ProductWithInventory[]>(Array.isArray(initialProducts) ? initialProducts : []);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("Gõ để tìm sản phẩm từ Web Quản Lý TMĐT.");
+  const [status, setStatus] = useState(
+    initialProducts.length
+      ? "Danh sách sản phẩm thật đã tải từ D1 cache."
+      : "Chưa có sản phẩm đã sync trong D1. Hãy bấm Đồng bộ ở trang Sản phẩm trước."
+  );
 
   const selected = useMemo(
     () => products.find((product) => product.sku === selectedSku) ?? null,
@@ -45,7 +49,8 @@ export function ProductSearchPicker({
       setLoading(true);
       const params = new URLSearchParams({ limit: "8" });
       if (query.trim()) params.set("q", query.trim());
-      const response = await fetch(`/api/ecommerce/products?${params}`, {
+      // NEO: Product picker dùng API cache D1 đã sync, không dùng danh sách demo hoặc state tạm.
+      const response = await fetch(`/api/products/search?${params}`, {
         cache: "no-store",
         signal: controller.signal
       }).catch(() => null);
@@ -56,9 +61,9 @@ export function ProductSearchPicker({
       const payload = (await response.json().catch(() => null)) as ApiEnvelope<ProductWithInventory[]> | null;
       if (response.ok && payload?.success) {
         setProducts(payload.data);
-        setStatus(payload.data.length ? "Danh sách sản phẩm thật đã tải." : "Không tìm thấy sản phẩm phù hợp.");
+        setStatus(payload.data.length ? "Danh sách sản phẩm thật đã tải từ D1 cache." : "Không tìm thấy sản phẩm đã sync phù hợp.");
       } else {
-        setStatus(payload && !payload.success ? payload.error ?? "Không tải được sản phẩm." : "Không tải được sản phẩm.");
+        setStatus(payload && !payload.success ? payload.error ?? "Không tải được sản phẩm đã sync." : "Không tải được sản phẩm đã sync.");
       }
       setLoading(false);
     }, 250);
@@ -120,7 +125,7 @@ export function ProductSearchPicker({
           >
             <div className="h-[52px] w-[52px] overflow-hidden rounded-md bg-slate-100">
               {product.imageUrl ? (
-                // NEO: Product picker chỉ đọc ảnh từ nguồn TMĐT, không tự tạo dữ liệu sản phẩm trong CRM.
+                // NEO: Product picker chỉ đọc ảnh từ nguồn TMĐT đã sync, không tự tạo dữ liệu sản phẩm trong CRM.
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={product.imageUrl} alt="" className="h-full w-full object-cover" />
               ) : null}

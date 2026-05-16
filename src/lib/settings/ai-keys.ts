@@ -178,7 +178,7 @@ export async function saveAiProviderKey(input: {
   return { keyName: slot.keyName, provider: slot.provider, masked: maskAiKey(value) };
 }
 
-export async function updateAiProviderKeyTestStatus(keyName: string, status: "valid" | "failed", error?: string | null) {
+export async function updateAiProviderKeyTestStatus(keyName: string, status: string, error?: string | null) {
   const db = await getD1Database();
   if (!db) return;
   try {

@@ -19,6 +19,9 @@ export type ProductCacheItem = {
   imageUrl: string;
   description: string;
   status: "active" | "inactive" | "low_stock";
+  source?: string;
+  rawPayload?: string;
+  missingFromSource?: boolean;
   priceUpdatedAt: string;
   syncedAt: string;
 };
@@ -82,6 +85,13 @@ export type ProductQuery = {
   q?: string;
   sku?: string;
   limit?: number;
+};
+
+export type ProductSyncSummary = {
+  lastSyncedAt: string | null;
+  syncedCount: number;
+  status: string | null;
+  error: string | null;
 };
 
 export interface EcommerceManagementProvider {

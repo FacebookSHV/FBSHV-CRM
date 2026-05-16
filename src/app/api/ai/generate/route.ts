@@ -1,6 +1,6 @@
 import { fail, failFromError, ok } from "@/lib/api-response";
 import { generateAiText, type AiTask } from "@/lib/ai/provider";
-import { getEcommerceProvider } from "@/lib/ecommerce/provider";
+import { readCachedProductBySku, readCachedProducts } from "@/lib/ecommerce/cache";
 
 const tasks = new Set<AiTask>(["caption", "inbox", "script", "calendar", "audit", "hashtags"]);
 
@@ -13,15 +13,9 @@ export async function POST(request: Request) {
   if (!body.task || !tasks.has(body.task)) return fail("Thiếu loại nội dung AI hợp lệ.", 400, "AI_TASK_REQUIRED");
 
   try {
-    const provider = getEcommerceProvider();
-    const productResult = body.productSku
-      ? await provider.getProductBySku(body.productSku)
-      : await provider.getProducts({ limit: 1 });
-    const product = productResult.success
-      ? Array.isArray(productResult.data)
-        ? productResult.data[0] ?? null
-        : productResult.data
-      : null;
+    const product = body.productSku
+      ? await readCachedProductBySku(body.productSku)
+      : (await readCachedProducts({ limit: 1 }))[0] ?? null;
 
     return ok(await generateAiText({ task: body.task, product, prompt: body.prompt }));
   } catch (error) {

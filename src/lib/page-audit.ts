@@ -1,5 +1,5 @@
 import { getD1Database } from "@/lib/db";
-import { getEcommerceProvider } from "@/lib/ecommerce/provider";
+import { readCachedProducts } from "@/lib/ecommerce/cache";
 import { getFacebookStore } from "@/lib/facebook/store";
 import type { FacebookPageRecord } from "@/lib/facebook/types";
 import { detectVietnamesePhone } from "@/lib/facebook/automation";
@@ -191,8 +191,8 @@ async function scorePage(page: FacebookPageRecord): Promise<PageAuditRun> {
     findings.push(finding(runId, page.id, "engagement", "info", "Chưa có event gần đây", "Theo dõi webhook sau bài đăng mới để đánh giá engagement thực tế."));
   }
 
-  const products = await getEcommerceProvider().getProducts({ limit: 5 });
-  if (!products.success || products.data.length === 0) {
+  const products = await readCachedProducts({ limit: 5 });
+  if (products.length === 0) {
     score -= 10;
     findings.push(finding(runId, page.id, "product_coverage", "warning", "Chưa đọc được sản phẩm TMĐT", "Kiểm tra lại ecommerce provider để planner có sản phẩm lên nội dung."));
   }

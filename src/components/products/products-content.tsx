@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { RefreshCw, Search, ShieldCheck, Tag } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { StatusPill } from "@/components/ui/status-pill";
-import type { ProductWithInventory } from "@/lib/ecommerce/types";
+import type { ProductSyncSummary, ProductWithInventory } from "@/lib/ecommerce/types";
 import { formatMoney } from "@/lib/money";
 
 type ProductsContentProps = {
   initialProducts: ProductWithInventory[];
+  initialSyncSummary?: ProductSyncSummary;
 };
 
 type ActionState = {
@@ -38,11 +39,20 @@ function productNumber(value: unknown, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
-export function ProductsContent({ initialProducts }: ProductsContentProps) {
+function formatDateTime(value?: string | null) {
+  return value ? new Date(value).toLocaleString("vi-VN") : "chưa có";
+}
+
+export function ProductsContent({ initialProducts, initialSyncSummary }: ProductsContentProps) {
   const [products, setProducts] = useState(Array.isArray(initialProducts) ? initialProducts : []);
   const [query, setQuery] = useState("");
+  const [syncSummary, setSyncSummary] = useState<ProductSyncSummary>(
+    initialSyncSummary ?? { lastSyncedAt: null, syncedCount: 0, status: null, error: null }
+  );
   const [actionState, setActionState] = useState<ActionState>({
-    message: "Đang dùng dữ liệu sản phẩm thật từ Web Quản Lý TMĐT.",
+    message: initialProducts.length
+      ? "Đang dùng dữ liệu sản phẩm đã sync và lưu bền trong D1."
+      : "Chưa có sản phẩm đã sync trong D1. Bấm Đồng bộ để lấy từ Web Quản Lý TMĐT.",
     tone: "info"
   });
   const [loadingSku, setLoadingSku] = useState<string | null>(null);
@@ -57,23 +67,33 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
     );
   }, [products, query]);
 
+  async function reloadProducts() {
+    const productsResponse = await fetch("/api/products", { cache: "no-store" });
+    const productsPayload = (await productsResponse.json().catch(() => null)) as unknown;
+    if (isEnvelope<ProductWithInventory[]>(productsPayload) && productsPayload.success) {
+      setProducts(productsPayload.data);
+    }
+  }
+
   async function syncProducts() {
     setLoadingSku("sync");
-    const response = await fetch("/api/ecommerce/sync-products", { method: "POST" });
-    const payload = await readEnvelope<{ synced: number; cached?: number; source: string; d1?: boolean }>(response);
+    const response = await fetch("/api/products/sync", { method: "POST" });
+    const payload = await readEnvelope<{ synced: number; cached?: number; source: string; d1?: boolean; lastSyncedAt?: string | null }>(response);
     if (response.ok && payload?.success) {
+      setSyncSummary({
+        lastSyncedAt: payload.data.lastSyncedAt ?? new Date().toISOString(),
+        syncedCount: payload.data.synced,
+        status: "success",
+        error: null
+      });
       setActionState({
-        message: `Đã đồng bộ ${payload.data.synced} sản phẩm từ Web TMĐT${payload.data.d1 ? " và cache vào D1" : ""}.`,
+        message: `Đã đồng bộ ${payload.data.synced} sản phẩm từ Web TMĐT${payload.data.d1 ? " và upsert vào D1" : ""}.`,
         tone: "success"
       });
-      const productsResponse = await fetch("/api/ecommerce/products");
-      const productsPayload = (await productsResponse.json().catch(() => null)) as unknown;
-      if (isEnvelope<ProductWithInventory[]>(productsPayload) && productsPayload.success) {
-        setProducts(productsPayload.data);
-      }
+      await reloadProducts();
     } else {
       setActionState({
-        message: payload && !payload.success ? payload.error ?? "Đồng bộ thất bại" : "Đồng bộ thất bại",
+        message: payload && !payload.success ? payload.error ?? "Đồng bộ thất bại, dữ liệu cũ vẫn được giữ." : "Đồng bộ thất bại, dữ liệu cũ vẫn được giữ.",
         tone: "danger"
       });
     }
@@ -82,7 +102,9 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
 
   async function checkPrice(sku: string) {
     setLoadingSku(sku);
-    const response = await fetch(`/api/ecommerce/products/sku/${encodeURIComponent(sku)}/price`);
+    const product = products.find((item) => productText(item.sku) === sku);
+    const productId = productText(product?.id, sku);
+    const response = await fetch(`/api/products/${encodeURIComponent(productId)}/check-price`, { method: "POST" });
     const payload = await readEnvelope<{ price: number; currency: string }>(response);
     setActionState(
       response.ok && payload?.success
@@ -100,10 +122,12 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
 
   async function checkInventory(sku: string) {
     setLoadingSku(sku);
-    const response = await fetch("/api/ecommerce/inventory/check", {
+    const product = products.find((item) => productText(item.sku) === sku);
+    const productId = productText(product?.id, sku);
+    const response = await fetch(`/api/products/${encodeURIComponent(productId)}/check-stock`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sku, quantity: 1 })
+      body: JSON.stringify({ quantity: 1 })
     });
     const payload = await readEnvelope<{ availableStock: number; enoughStock: boolean }>(response);
     setActionState(
@@ -128,14 +152,17 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Cache sản phẩm từ Web Quản Lý TMĐT, chỉ kiểm tra giá/tồn qua API ngoài.
           </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Last synced: {formatDateTime(syncSummary.lastSyncedAt)} · synced_count: {syncSummary.syncedCount}
+          </p>
         </div>
         <button
           type="button"
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white focus-ring hover:bg-brand-700"
-          onClick={syncProducts}
+          onClick={() => void syncProducts()}
           disabled={loadingSku === "sync"}
         >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          <RefreshCw className={["h-4 w-4", loadingSku === "sync" ? "animate-spin" : ""].join(" ")} aria-hidden="true" />
           Đồng bộ
         </button>
       </div>
@@ -152,13 +179,14 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
         <StatusPill tone={actionState.tone}>{actionState.message}</StatusPill>
       </div>
       <div className="grid gap-3 lg:hidden">
+        {visibleProducts.length === 0 ? <EmptyProducts /> : null}
         {visibleProducts.map((product) => (
           <ProductCard
             key={productText(product.id, productText(product.sku))}
             product={product}
             loading={loadingSku === productText(product.sku)}
-            onPrice={() => checkPrice(productText(product.sku))}
-            onInventory={() => checkInventory(productText(product.sku))}
+            onPrice={() => void checkPrice(productText(product.sku))}
+            onInventory={() => void checkInventory(productText(product.sku))}
           />
         ))}
       </div>
@@ -174,6 +202,13 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
+            {visibleProducts.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8">
+                  <EmptyProducts />
+                </td>
+              </tr>
+            ) : null}
             {visibleProducts.map((product) => (
               <tr key={productText(product.id, productText(product.sku))}>
                 <td className="px-4 py-3">
@@ -181,6 +216,7 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
                     {productText(product.name, "Chưa có tên sản phẩm")}
                   </Link>
                   <div className="text-xs text-slate-500">SKU {productText(product.sku, "chưa có")}</div>
+                  <div className="text-xs text-slate-500">Sync: {formatDateTime(product.syncedAt)}</div>
                 </td>
                 <td className="px-4 py-3">{formatMoney(product.currentPrice, product.currency)}</td>
                 <td className="px-4 py-3">
@@ -191,8 +227,8 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
-                    <ActionButton icon={<Tag />} label="Kiểm giá" onClick={() => checkPrice(productText(product.sku))} />
-                    <ActionButton icon={<ShieldCheck />} label="Kiểm tồn" onClick={() => checkInventory(productText(product.sku))} />
+                    <ActionButton icon={<Tag />} label="Kiểm giá" onClick={() => void checkPrice(productText(product.sku))} />
+                    <ActionButton icon={<ShieldCheck />} label="Kiểm tồn" onClick={() => void checkInventory(productText(product.sku))} />
                   </div>
                 </td>
               </tr>
@@ -205,13 +241,13 @@ export function ProductsContent({ initialProducts }: ProductsContentProps) {
 }
 
 function ProductStatus({ product }: { product: ProductWithInventory }) {
-  if (product.status === "inactive") return <StatusPill tone="neutral">Ngưng bán</StatusPill>;
+  if (product.status === "inactive" || product.missingFromSource) return <StatusPill tone="neutral">Ngưng bán</StatusPill>;
   if (productNumber(product.availableStock) <= productNumber(product.lowStockThreshold, 10)) return <StatusPill tone="warning">Tồn thấp</StatusPill>;
   return <StatusPill tone="success">Đang bán</StatusPill>;
 }
 
 type ProductActionProps = {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   onClick: () => void;
 };
@@ -247,6 +283,7 @@ function ProductCard({ product, loading, onPrice, onInventory }: ProductCardProp
             {productText(product.name, "Chưa có tên sản phẩm")}
           </Link>
           <div className="mt-1 text-xs text-slate-500">SKU {productText(product.sku, "chưa có")}</div>
+          <div className="mt-1 text-xs text-slate-500">Sync: {formatDateTime(product.syncedAt)}</div>
         </div>
         <ProductStatus product={product} />
       </div>
@@ -265,5 +302,13 @@ function ProductCard({ product, loading, onPrice, onInventory }: ProductCardProp
         <ActionButton icon={<ShieldCheck />} label="Kiểm tồn" onClick={onInventory} />
       </div>
     </article>
+  );
+}
+
+function EmptyProducts() {
+  return (
+    <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+      Chưa có sản phẩm trong D1 cache. Bấm Đồng bộ để lấy dữ liệu thật từ Web Quản Lý TMĐT; nếu API nguồn lỗi, danh sách cũ sẽ không bị xoá.
+    </div>
   );
 }

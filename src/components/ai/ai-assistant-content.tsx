@@ -10,6 +10,13 @@ type AiAssistantContentProps = {
   products: ProductWithInventory[];
 };
 
+type AiFailure = {
+  keyName: string;
+  provider: string;
+  status: string;
+  message: string;
+};
+
 const templates = {
   caption: "Viết caption quảng cáo ngắn, nêu lợi ích chính và lời kêu gọi nhắn tin.",
   inbox: "Soạn câu trả lời tư vấn thân thiện, hỏi thêm nhu cầu nếu thiếu thông tin.",
@@ -19,13 +26,14 @@ const templates = {
 export function AiAssistantContent({ products }: AiAssistantContentProps) {
   const [selectedProduct, setSelectedProduct] = useState<ProductWithInventory | null>(products[0] ?? null);
   const [mode, setMode] = useState<keyof typeof templates>("caption");
-  const [result, setResult] = useState("Chọn sản phẩm và loại nội dung để tạo bản nháp.");
+  const [result, setResult] = useState("Chọn sản phẩm thật đã sync và loại nội dung để tạo bản nháp.");
   const [notice, setNotice] = useState("AI chưa gọi.");
+  const [failures, setFailures] = useState<AiFailure[]>([]);
   const [loading, setLoading] = useState(false);
 
   async function generate() {
     if (!selectedProduct) {
-      setNotice("Chưa chọn sản phẩm thật từ Web Quản Lý TMĐT.");
+      setNotice("Chưa chọn sản phẩm thật từ D1 cache. Hãy đồng bộ sản phẩm trước.");
       return;
     }
     setLoading(true);
@@ -35,11 +43,12 @@ export function AiAssistantContent({ products }: AiAssistantContentProps) {
       body: JSON.stringify({ task: mode, productSku: selectedProduct.sku, prompt: templates[mode] })
     });
     const payload = (await response.json().catch(() => null)) as
-      | { success: true; data: { mode: "ai" | "template"; provider: string; text: string; notice?: string } }
+      | { success: true; data: { mode: "ai" | "template"; provider: string; text: string; notice?: string; failures?: AiFailure[] } }
       | { success: false; error?: string }
       | null;
     if (response.ok && payload?.success) {
       setResult(payload.data.text);
+      setFailures(payload.data.failures ?? []);
       setNotice(payload.data.notice || (payload.data.mode === "ai" ? `AI thật: ${payload.data.provider}` : "AI chưa cấu hình - dùng template an toàn."));
     } else {
       setNotice(payload && !payload.success ? payload.error ?? "Tạo nội dung lỗi." : "Tạo nội dung lỗi.");
@@ -52,7 +61,7 @@ export function AiAssistantContent({ products }: AiAssistantContentProps) {
       <div className="mb-5">
         <h1 className="text-2xl font-semibold text-ink">AI Assistant</h1>
         <p className="mt-1 text-sm leading-6 text-slate-600">
-          Tạo nội dung tư vấn, caption và kịch bản video từ sản phẩm thật.
+          Tạo nội dung tư vấn, caption và kịch bản video từ sản phẩm thật đã đồng bộ.
         </p>
       </div>
       <div className="mb-4">
@@ -89,7 +98,7 @@ export function AiAssistantContent({ products }: AiAssistantContentProps) {
             </div>
             <button
               type="button"
-              onClick={generate}
+              onClick={() => void generate()}
               disabled={loading || !selectedProduct}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white focus-ring hover:bg-brand-700 disabled:opacity-50"
             >
@@ -101,8 +110,17 @@ export function AiAssistantContent({ products }: AiAssistantContentProps) {
         <section className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
           <h2 className="text-sm font-semibold text-ink">Kết quả</h2>
           <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{result}</p>
+          {failures.length > 0 ? (
+            <div className="mt-4 grid gap-2">
+              {failures.map((failure) => (
+                <div key={`${failure.keyName}-${failure.status}`} className="rounded-md border border-slate-200 p-3 text-xs text-slate-600">
+                  <span className="font-semibold text-ink">{failure.keyName}</span>: {failure.status} - {failure.message}
+                </div>
+              ))}
+            </div>
+          ) : null}
           <p className="mt-4 text-xs leading-5 text-slate-500">
-            Multi-key failover sẽ thử GEMINI_API_KEY_1 đến GEMINI_API_KEY_5 rồi OpenAI nếu đã cấu hình.
+            Multi-key failover thử GEMINI_API_KEY_1 đến GEMINI_API_KEY_5 rồi OpenAI nếu đã cấu hình.
           </p>
         </section>
       </div>

@@ -1,12 +1,48 @@
 import { getD1Database } from "@/lib/db";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
 import { getEcommerceProvider } from "./provider";
-import type { ApiResult, ProductWithInventory } from "./types";
+import type { ApiResult, ProductSyncSummary, ProductWithInventory } from "./types";
 
 type CacheProductInput = Partial<ProductWithInventory> & {
   id?: string | null;
   sku?: string | null;
   name?: string | null;
+};
+
+type CachedProductRow = {
+  id: string;
+  workspace_id: string;
+  external_product_id: string;
+  sku: string;
+  name: string;
+  category: string | null;
+  cost_price: number;
+  original_price: number;
+  sale_price: number;
+  current_price: number;
+  discount_amount: number;
+  discount_percent: number;
+  currency: string;
+  image_url: string | null;
+  description: string | null;
+  status: ProductWithInventory["status"];
+  source: string | null;
+  raw_payload_json: string | null;
+  missing_from_source: number | null;
+  price_updated_at: string | null;
+  synced_at: string;
+  stock: number | null;
+  available_stock: number | null;
+  reserved_stock: number | null;
+  low_stock_threshold: number | null;
+  inventory_synced_at: string | null;
+};
+
+type SyncLogRow = {
+  status: string;
+  synced_count: number;
+  error: string | null;
+  created_at: string;
 };
 
 function nowIso() {
@@ -26,6 +62,20 @@ function normalizeStatus(value: unknown, availableStock: number, lowStockThresho
   if (value === "inactive") return "inactive";
   if (availableStock <= lowStockThreshold) return "low_stock";
   return "active";
+}
+
+function clampLimit(limit?: number) {
+  const numeric = Number(limit ?? 50);
+  if (!Number.isFinite(numeric)) return 50;
+  return Math.max(1, Math.min(500, Math.floor(numeric)));
+}
+
+function safeJson(value: unknown) {
+  try {
+    return JSON.stringify(value ?? {});
+  } catch {
+    return "{}";
+  }
 }
 
 export function normalizeProductForCache(input: CacheProductInput, syncedAt = nowIso()): ProductWithInventory {
@@ -50,12 +100,116 @@ export function normalizeProductForCache(input: CacheProductInput, syncedAt = no
     imageUrl: safeText(input.imageUrl),
     description: safeText(input.description),
     status: normalizeStatus(input.status, availableStock, lowStockThreshold),
+    source: safeText(input.source, "ecommerce_external_products"),
+    rawPayload: safeText(input.rawPayload, safeJson(input)),
+    missingFromSource: Boolean(input.missingFromSource),
     priceUpdatedAt: safeText(input.priceUpdatedAt, syncedAt),
     syncedAt,
     stock: safeNumber(input.stock, availableStock),
     availableStock,
     reservedStock: safeNumber(input.reservedStock),
     lowStockThreshold
+  };
+}
+
+function mapCachedProduct(row: CachedProductRow): ProductWithInventory {
+  const syncedAt = row.synced_at || row.inventory_synced_at || nowIso();
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    externalProductId: row.external_product_id,
+    sku: row.sku,
+    name: row.name,
+    category: row.category ?? "",
+    costPrice: safeNumber(row.cost_price),
+    originalPrice: safeNumber(row.original_price),
+    salePrice: safeNumber(row.sale_price),
+    currentPrice: safeNumber(row.current_price),
+    discountAmount: safeNumber(row.discount_amount),
+    discountPercent: safeNumber(row.discount_percent),
+    currency: safeText(row.currency, "VND"),
+    imageUrl: row.image_url ?? "",
+    description: row.description ?? "",
+    status: row.status,
+    source: row.source ?? "ecommerce_external_products",
+    rawPayload: row.raw_payload_json ?? "{}",
+    missingFromSource: Boolean(row.missing_from_source),
+    priceUpdatedAt: row.price_updated_at ?? syncedAt,
+    syncedAt,
+    stock: safeNumber(row.stock),
+    availableStock: safeNumber(row.available_stock),
+    reservedStock: safeNumber(row.reserved_stock),
+    lowStockThreshold: safeNumber(row.low_stock_threshold, 10)
+  };
+}
+
+const cachedProductSelect = `
+  select
+    p.id, p.workspace_id, p.external_product_id, p.sku, p.name, p.category,
+    p.cost_price, p.original_price, p.sale_price, p.current_price, p.discount_amount,
+    p.discount_percent, p.currency, p.image_url, p.description, p.status,
+    p.source, p.raw_payload_json, p.missing_from_source, p.price_updated_at, p.synced_at,
+    i.stock, i.available_stock, i.reserved_stock, i.low_stock_threshold, i.synced_at as inventory_synced_at
+  from product_cache p
+  left join inventory_cache i on i.sku = p.sku and i.workspace_id = p.workspace_id
+`;
+
+export async function readCachedProducts(params: { q?: string; sku?: string; limit?: number } = {}) {
+  const db = await getD1Database();
+  if (!db) return [] as ProductWithInventory[];
+
+  const limit = clampLimit(params.limit);
+  const where: string[] = ["p.workspace_id = ?"];
+  const binds: Array<string | number> = [DEFAULT_WORKSPACE_ID];
+  if (params.sku?.trim()) {
+    where.push("lower(p.sku) = lower(?)");
+    binds.push(params.sku.trim());
+  }
+  if (params.q?.trim()) {
+    where.push("(lower(p.name) like lower(?) or lower(p.sku) like lower(?) or lower(p.external_product_id) like lower(?))");
+    const needle = `%${params.q.trim()}%`;
+    binds.push(needle, needle, needle);
+  }
+
+  // NEO: Product picker và trang Products đọc cache D1 bền sau F5, không đọc state React tạm thời.
+  const rows = await db
+    .prepare(`${cachedProductSelect} where ${where.join(" and ")} order by p.synced_at desc, p.name asc limit ?`)
+    .bind(...binds, limit)
+    .all<CachedProductRow>();
+  return (rows.results ?? []).map(mapCachedProduct);
+}
+
+export async function readCachedProductById(id: string) {
+  const db = await getD1Database();
+  if (!db) return null;
+  const row = await db
+    .prepare(`${cachedProductSelect} where p.workspace_id = ? and (p.id = ? or p.external_product_id = ? or p.sku = ?) limit 1`)
+    .bind(DEFAULT_WORKSPACE_ID, id, id, id)
+    .first<CachedProductRow>();
+  return row ? mapCachedProduct(row) : null;
+}
+
+export async function readCachedProductBySku(sku: string) {
+  const products = await readCachedProducts({ sku, limit: 1 });
+  return products[0] ?? null;
+}
+
+export async function getProductSyncSummary(): Promise<ProductSyncSummary> {
+  const db = await getD1Database();
+  if (!db) return { lastSyncedAt: null, syncedCount: 0, status: "no_database", error: null };
+  const latestAny = await db
+    .prepare("select status, synced_count, error, created_at from product_sync_logs where workspace_id = ? order by created_at desc limit 1")
+    .bind(DEFAULT_WORKSPACE_ID)
+    .first<SyncLogRow>();
+  const latestSuccess = await db
+    .prepare("select status, synced_count, error, created_at from product_sync_logs where workspace_id = ? and status = 'success' order by created_at desc limit 1")
+    .bind(DEFAULT_WORKSPACE_ID)
+    .first<SyncLogRow>();
+  return {
+    lastSyncedAt: latestSuccess?.created_at ?? latestAny?.created_at ?? null,
+    syncedCount: latestSuccess?.synced_count ?? latestAny?.synced_count ?? 0,
+    status: latestAny?.status ?? null,
+    error: latestAny?.status === "failed" ? latestAny.error : null
   };
 }
 
@@ -86,8 +240,9 @@ export async function cacheProductsToD1(products: ProductWithInventory[]) {
       .prepare(
         `insert into product_cache
         (id, workspace_id, external_product_id, sku, name, category, cost_price, original_price, sale_price, current_price,
-         discount_amount, discount_percent, currency, image_url, description, status, price_updated_at, synced_at)
-        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         discount_amount, discount_percent, currency, image_url, description, status, source, raw_payload_json, missing_from_source,
+         price_updated_at, synced_at)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         on conflict(sku) do update set
           external_product_id = excluded.external_product_id,
           name = excluded.name,
@@ -102,6 +257,9 @@ export async function cacheProductsToD1(products: ProductWithInventory[]) {
           image_url = excluded.image_url,
           description = excluded.description,
           status = excluded.status,
+          source = excluded.source,
+          raw_payload_json = excluded.raw_payload_json,
+          missing_from_source = 0,
           price_updated_at = excluded.price_updated_at,
           synced_at = excluded.synced_at`
       )
@@ -122,6 +280,9 @@ export async function cacheProductsToD1(products: ProductWithInventory[]) {
         product.imageUrl,
         product.description,
         product.status,
+        product.source ?? "ecommerce_external_products",
+        product.rawPayload ?? safeJson(product),
+        product.missingFromSource ? 1 : 0,
         product.priceUpdatedAt,
         product.syncedAt
       )
@@ -158,7 +319,7 @@ export async function cacheProductsToD1(products: ProductWithInventory[]) {
 
 export async function syncProductsFromExternal(
   limit = 200
-): Promise<ApiResult<{ synced: number; cached: number; source: "http"; d1: boolean }>> {
+): Promise<ApiResult<{ synced: number; cached: number; source: "http"; d1: boolean; lastSyncedAt: string | null }>> {
   const products = await getEcommerceProvider().getProducts({ limit });
   const db = await getD1Database();
   if (!products.success) {
@@ -167,13 +328,15 @@ export async function syncProductsFromExternal(
   }
 
   const cached = await cacheProductsToD1(products.data);
+  const summary = await getProductSyncSummary();
   return {
     success: true as const,
     data: {
       synced: products.data.length,
       cached: cached.cached,
       source: "http" as const,
-      d1: cached.d1
+      d1: cached.d1,
+      lastSyncedAt: summary.lastSyncedAt
     }
   };
 }

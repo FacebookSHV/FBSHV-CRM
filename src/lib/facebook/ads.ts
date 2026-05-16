@@ -60,6 +60,39 @@ async function latestConnection() {
     .first<ConnectionTokenRow>();
 }
 
+async function getAdsAccessToken() {
+  await getAdsReadiness({ strict: true });
+  const config = getFacebookRuntimeConfig();
+  if (config.mode !== "real") throw blockedMetaPermission("ads_read,business_management");
+  const connection = await latestConnection();
+  if (!connection) throw blockedMetaPermission("ads_read,business_management");
+  return {
+    token: await decryptToken(connection.access_token_encrypted, config.encryptionKey),
+    graphApiVersion: config.graphApiVersion
+  };
+}
+
+async function metaAdsRequest<T>(path: string, params: Record<string, string | undefined> = {}) {
+  const auth = await getAdsAccessToken();
+  const url = new URL(`https://graph.facebook.com/${auth.graphApiVersion}${path}`);
+  for (const [key, value] of Object.entries(params)) {
+    if (value) url.searchParams.set(key, value);
+  }
+  url.searchParams.set("access_token", auth.token);
+  const response = await fetch(url);
+  const payload = (await response.json().catch(() => ({}))) as T & {
+    error?: { message?: string; code?: number; type?: string; error_subcode?: number };
+  };
+  if (!response.ok || payload.error) {
+    const error = payload.error;
+    const details = [error?.type, error?.code ? `code=${error.code}` : "", error?.error_subcode ? `subcode=${error.error_subcode}` : ""]
+      .filter(Boolean)
+      .join(", ");
+    throw new Error(`META_ADS_API_ERROR: ${error?.message || "Meta Marketing API trả lỗi"}${details ? ` (${details})` : ""}`);
+  }
+  return payload;
+}
+
 function missing(scopes: string[], required: string[]) {
   return required.filter((permission) => !scopes.includes(permission));
 }
@@ -152,6 +185,114 @@ export async function syncAdAccountsFromMeta() {
   }
 
   return { synced: accounts.length, updatedAt: now, accounts: await getAdsReadiness() };
+}
+
+export async function getAdAccountDetail(accountId: string) {
+  const readiness = await getAdsReadiness({ strict: true });
+  const cached = readiness.accounts.find((account) => account.id === accountId || account.externalAccountId === accountId);
+  const externalId = cached?.externalAccountId || accountId;
+  // NEO: Ad account detail gọi Marketing API thật; nếu thiếu quyền thì trả lỗi permission, không dựng số liệu giả.
+  const detail = await metaAdsRequest<{
+    id?: string;
+    name?: string;
+    account_status?: number | string;
+    currency?: string;
+    timezone_name?: string;
+    timezone_id?: number;
+  }>(`/${encodeURIComponent(externalId)}`, {
+    fields: "id,name,account_status,currency,timezone_name,timezone_id"
+  });
+  return {
+    id: cached?.id || detail.id || externalId,
+    externalAccountId: detail.id || externalId,
+    name: detail.name || cached?.name || externalId,
+    status: String(detail.account_status ?? cached?.status ?? "unknown"),
+    currency: detail.currency ?? null,
+    timezoneName: detail.timezone_name ?? null,
+    timezoneId: detail.timezone_id ?? null,
+    writeActionsEnabled: process.env.AD_WRITE_ACTIONS_ENABLED === "true"
+  };
+}
+
+export async function listAdAccountCampaigns(accountId: string) {
+  const payload = await metaAdsRequest<{
+    data?: Array<{
+      id?: string;
+      name?: string;
+      status?: string;
+      effective_status?: string;
+      objective?: string;
+      created_time?: string;
+      updated_time?: string;
+    }>;
+  }>(`/${encodeURIComponent(accountId)}/campaigns`, {
+    fields: "id,name,status,effective_status,objective,created_time,updated_time",
+    limit: "100"
+  });
+  return payload.data ?? [];
+}
+
+export async function listAdAccountAdSets(accountId: string, campaignId?: string | null) {
+  const payload = await metaAdsRequest<{
+    data?: Array<{
+      id?: string;
+      name?: string;
+      campaign_id?: string;
+      status?: string;
+      effective_status?: string;
+      optimization_goal?: string;
+      billing_event?: string;
+      daily_budget?: string;
+      lifetime_budget?: string;
+      targeting?: Record<string, unknown>;
+    }>;
+  }>(`/${encodeURIComponent(accountId)}/adsets`, {
+    fields: "id,name,campaign_id,status,effective_status,optimization_goal,billing_event,daily_budget,lifetime_budget,targeting",
+    filtering: campaignId ? JSON.stringify([{ field: "campaign.id", operator: "EQUAL", value: campaignId }]) : undefined,
+    limit: "100"
+  });
+  return payload.data ?? [];
+}
+
+export async function listAdAccountAds(accountId: string, campaignId?: string | null, adsetId?: string | null) {
+  const filters = [
+    campaignId ? { field: "campaign.id", operator: "EQUAL", value: campaignId } : null,
+    adsetId ? { field: "adset.id", operator: "EQUAL", value: adsetId } : null
+  ].filter(Boolean);
+  const payload = await metaAdsRequest<{
+    data?: Array<{
+      id?: string;
+      name?: string;
+      adset_id?: string;
+      campaign_id?: string;
+      status?: string;
+      effective_status?: string;
+      preview_shareable_link?: string;
+      creative?: { id?: string; name?: string };
+    }>;
+  }>(`/${encodeURIComponent(accountId)}/ads`, {
+    fields: "id,name,adset_id,campaign_id,status,effective_status,preview_shareable_link,creative{id,name}",
+    filtering: filters.length ? JSON.stringify(filters) : undefined,
+    limit: "100"
+  });
+  return payload.data ?? [];
+}
+
+export async function listAdAccountInsights(
+  accountId: string,
+  params: { datePreset?: string | null; since?: string | null; until?: string | null; level?: string | null } = {}
+) {
+  const timeRange = params.since && params.until ? JSON.stringify({ since: params.since, until: params.until }) : undefined;
+  const payload = await metaAdsRequest<{
+    data?: Array<Record<string, unknown>>;
+  }>(`/${encodeURIComponent(accountId)}/insights`, {
+    fields: "spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
+    date_preset: timeRange ? undefined : params.datePreset || "last_7d",
+    time_range: timeRange,
+    level: params.level || "account",
+    limit: "100"
+  });
+  return payload.data ?? [];
 }
 
 export async function listAdCampaigns() {

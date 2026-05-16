@@ -1,12 +1,12 @@
 "use client";
 
 import { Menu } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { MobileNav } from "./mobile-nav";
 import { Sidebar } from "./sidebar";
 
 type AppShellProps = {
-  children: React.ReactNode;
+  children: ReactNode;
   environmentLabel?: string;
 };
 
@@ -43,7 +43,7 @@ export function AppShell({ children, environmentLabel = "Môi trường real" }:
               </div>
             </div>
             <div className="rounded-md border border-slate-200 px-3 py-2 text-right">
-              <div className="text-xs font-semibold text-ink">Demo Admin</div>
+              <div className="text-xs font-semibold text-ink">Production</div>
               <div className="text-[11px] text-slate-500">{environmentLabel}</div>
             </div>
           </div>

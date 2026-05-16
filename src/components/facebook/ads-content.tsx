@@ -1,6 +1,7 @@
 "use client";
 
-import { PlugZap, RefreshCcw, ShieldAlert } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, PlugZap, RefreshCcw, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "@/components/pages/page-header";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -22,7 +23,7 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
   const [status, setStatus] = useState("Ads chỉ đọc account thật từ Meta, không hiển thị ad account giả.");
 
   async function refreshAccounts() {
-    const response = await fetch("/api/ads/accounts", { method: "POST" });
+    const response = await fetch("/api/ads/accounts/refresh", { method: "POST" });
     const payload = (await response.json().catch(() => null)) as ApiEnvelope<{ synced: number; accounts: AdsReadiness }> | null;
     if (response.ok && payload?.success) {
       setReadiness(payload.data.accounts);
@@ -36,7 +37,7 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
     <div>
       <PageHeader
         title="Facebook Ads"
-        subtitle="Kết nối và kiểm ad account thật ở chế độ read-only; mọi Ads write vẫn bị chặn nếu chưa bật cờ an toàn."
+        subtitle="Kết nối và quản lý ad account thật ở chế độ read-only; mọi Ads write bị chặn nếu chưa bật cờ an toàn."
         action={
           <div className="flex gap-2">
             <a
@@ -67,7 +68,7 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
                 ? `Thiếu quyền ${readiness.missingPermissions.join(", ")} nên chưa gọi Ads Graph API.`
                 : readiness.status === "empty"
                   ? "Đã có quyền đọc nhưng chưa cache được ad account thật trong CRM."
-                  : "Đã cache ad account thật ở chế độ read-only."}
+                  : "Đã cache ad account thật. Bấm vào từng account để xem campaign, ad set, ads, insights và tạo draft."}
             </p>
           </div>
           <StatusPill tone={readiness.writeActionsEnabled ? "warning" : "success"}>
@@ -79,11 +80,20 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
       {readiness.accounts.length > 0 ? (
         <section className="mt-4 grid gap-3 md:grid-cols-2">
           {readiness.accounts.map((account) => (
-            <article key={account.id} className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
-              <h3 className="text-sm font-semibold text-ink">{account.name}</h3>
-              <p className="mt-1 text-xs text-slate-500">{account.externalAccountId}</p>
+            <Link
+              key={account.id}
+              href={`/ads/accounts/${encodeURIComponent(account.externalAccountId)}`}
+              className="group rounded-md border border-slate-200 bg-white p-4 shadow-soft focus-ring hover:border-brand-200 hover:bg-brand-50/40"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-semibold text-ink">{account.name}</h3>
+                  <p className="mt-1 text-xs text-slate-500">{account.externalAccountId}</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-brand-700" aria-hidden="true" />
+              </div>
               <div className="mt-3"><StatusPill tone="info">{account.status}</StatusPill></div>
-            </article>
+            </Link>
           ))}
         </section>
       ) : null}
@@ -95,7 +105,7 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
             <h3 className="mt-3 text-sm font-semibold text-ink">{scope}</h3>
             <p className="mt-2 text-sm text-slate-600">
               {scope === "ads_management"
-                ? "Chỉ dùng cho thao tác ghi Ads, hiện vẫn bị chặn bởi AD_WRITE_ACTIONS_ENABLED."
+                ? "Chỉ dùng cho thao tác ghi Ads, hiện bị chặn bởi AD_WRITE_ACTIONS_ENABLED nếu chưa bật."
                 : "Cần cho Connect Ads Account và đọc danh sách ad account thật."}
             </p>
           </article>

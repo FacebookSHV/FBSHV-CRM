@@ -8,7 +8,7 @@ export type PublishJob = {
   postId: string;
   pageId: string;
   idempotencyKey: string;
-  status: "pending" | "publishing" | "published" | "failed" | "cancelled" | "scheduled";
+  status: "pending" | "dry_run" | "publishing" | "published" | "failed" | "cancelled" | "scheduled";
   dryRun: boolean;
   scheduledAt?: string | null;
   externalPostId?: string | null;
@@ -128,6 +128,16 @@ export async function addContentPostTargets(postId: string, pageIds: string[]) {
   return uniquePageIds;
 }
 
+export async function replaceContentPostTargets(postId: string, pageIds: string[]) {
+  const uniquePageIds = [...new Set(pageIds.filter(Boolean))];
+  const db = await getD1Database();
+  if (!db) return uniquePageIds;
+  // NEO: Khi edit bài, danh sách Fanpage target được thay thế bền trong D1 theo lựa chọn mới.
+  await db.prepare("delete from content_post_targets where post_id = ?").bind(postId).run();
+  await Promise.all(uniquePageIds.map((pageId) => upsertTarget(postId, pageId)));
+  return uniquePageIds;
+}
+
 export async function listPublishJobs(postId: string) {
   const db = await getD1Database();
   if (!db) return [...memoryJobs.values()].filter((job) => job.postId === postId);
@@ -169,6 +179,7 @@ export async function createPublishJobs(input: {
     // NEO: Không tự đăng hàng loạt; khi chưa bật cờ publish thật thì chỉ tạo job dry-run theo từng Page.
     if (job.dryRun || !input.publishNow) {
       job.error = job.dryRun ? "AUTO_PUBLISH_POSTS_DISABLED" : null;
+      if (job.dryRun && input.publishNow && !input.scheduledAt) job.status = "dry_run";
       job = await saveJob(job);
       await writeLog(job, input.scheduledAt ? "schedule" : "publish_dry_run", job.status, job.error ?? "");
       jobs.push(job);

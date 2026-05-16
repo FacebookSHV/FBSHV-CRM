@@ -36,4 +36,21 @@ export type EditPostDraft = {
   caption: string;
   cta: string;
   scheduledAt: string;
+  productSku: string;
+  pageIds: string[];
+};
+
+export type SchedulePostDraft = {
+  id: string;
+  title: string;
+  scheduledAt: string;
+};
+
+export type PublishJobPreview = {
+  id: string;
+  postId: string;
+  pageId: string;
+  status: string;
+  dryRun: boolean;
+  error?: string | null;
 };

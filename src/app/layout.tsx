@@ -10,12 +10,12 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
-  const usesMock = process.env.MOCK_EXTERNAL_APIS !== "false" || process.env.MOCK_ECOMMERCE_API !== "false";
+  const usesFallback = process.env.MOCK_EXTERNAL_APIS !== "false" || process.env.MOCK_ECOMMERCE_API !== "false";
 
   return (
     <html lang="vi">
       <body>
-        <AppShell environmentLabel={usesMock ? "Môi trường mock" : "Môi trường real"}>{children}</AppShell>
+        <AppShell environmentLabel={usesFallback ? "Môi trường chưa kết nối đủ" : "Môi trường real"}>{children}</AppShell>
       </body>
     </html>
   );

@@ -7,7 +7,15 @@ import { PageHeader } from "@/components/pages/page-header";
 import { StatusPill } from "@/components/ui/status-pill";
 import { ContentPlannerEditor } from "./content-planner-editor";
 import { ContentPlannerPostList } from "./content-planner-post-list";
-import type { ContentIdea, ContentPost, EditPostDraft, FacebookPage, Suggestion } from "./content-planner-types";
+import type {
+  ContentIdea,
+  ContentPost,
+  EditPostDraft,
+  FacebookPage,
+  PublishJobPreview,
+  SchedulePostDraft,
+  Suggestion
+} from "./content-planner-types";
 
 type PlannerEnvelope = { success: boolean; data?: unknown; error?: string };
 
@@ -20,6 +28,10 @@ function localFromIso(value?: string | null) {
   const date = new Date(value);
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function defaultPageSelection(pages: FacebookPage[]) {
+  return pages.slice(0, 2).map((page) => page.id);
 }
 
 export function ContentPlannerContent() {
@@ -36,6 +48,9 @@ export function ContentPlannerContent() {
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
   const [editing, setEditing] = useState<EditPostDraft | null>(null);
+  const [scheduleDraft, setScheduleDraft] = useState<SchedulePostDraft | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<ContentPost | null>(null);
+  const [publishJobs, setPublishJobs] = useState<PublishJobPreview[]>([]);
   const [status, setStatus] = useState("Đang tải planner...");
 
   async function loadPlanner() {
@@ -51,7 +66,7 @@ export function ContentPlannerContent() {
     if (calendarPayload.success && calendarPayload.data) setSuggestions(calendarPayload.data.suggestions);
     if (pagesPayload.success && pagesPayload.data) {
       setPages(pagesPayload.data.pages);
-      setSelectedPageIds((current) => (current.length ? current : pagesPayload.data?.pages.slice(0, 2).map((page) => page.id) ?? []));
+      setSelectedPageIds((current) => (current.length ? current : defaultPageSelection(pagesPayload.data?.pages ?? [])));
     }
     setStatus("Planner sẵn sàng: draft, scheduled, upload R2 và publish job theo từng Page.");
   }
@@ -71,7 +86,7 @@ export function ContentPlannerContent() {
       setIdeas(payload.data.ideas);
       setStatus(
         payload.data.aiMode === "ai"
-          ? `Đã tạo ${payload.data.ideas.length} ý tưởng bằng AI thật từ sản phẩm TMĐT.`
+          ? `Đã tạo ${payload.data.ideas.length} ý tưởng bằng AI thật từ sản phẩm đã sync.`
           : payload.data.notice || `Đã tạo ${payload.data.ideas.length} ý tưởng bằng template an toàn.`
       );
     } else {
@@ -101,7 +116,7 @@ export function ContentPlannerContent() {
   }
 
   async function createPost(mode: "draft" | "schedule" | "publish", idea?: ContentIdea) {
-    const pageIds = selectedPageIds.length ? selectedPageIds : pages.slice(0, 1).map((page) => page.id);
+    const pageIds = selectedPageIds.length ? selectedPageIds : defaultPageSelection(pages).slice(0, 1);
     const source = idea ?? {
       title: manualTitle,
       caption: manualCaption,
@@ -110,6 +125,10 @@ export function ContentPlannerContent() {
       template: "product_intro",
       mediaSuggestion: ""
     };
+    if (!source.productSku) {
+      setStatus("Cần chọn sản phẩm thật đã sync trước khi lưu bài.");
+      return;
+    }
     if (!source.title.trim() || !source.caption.trim()) {
       setStatus("Cần nhập tiêu đề và caption trước khi lưu.");
       return;
@@ -129,40 +148,44 @@ export function ContentPlannerContent() {
       return;
     }
     if (!(await uploadMedia(payload.data.post.id))) return;
-    if (mode === "schedule") await schedulePost(payload.data.post, scheduledAt);
+    if (mode === "schedule") await schedulePost(payload.data.post, scheduledAt, pageIds);
     if (mode === "publish") await publishPost(payload.data.post, pageIds);
     if (!idea) resetManualForm();
     setStatus(mode === "draft" ? "Đã lưu bài nháp." : mode === "schedule" ? "Đã lưu và tạo job scheduled." : "Đã tạo publish job theo từng Page.");
     await loadPlanner();
   }
 
-  async function schedulePost(post: ContentPost, localValue = scheduledAt) {
+  async function schedulePost(post: ContentPost, localValue = scheduledAt, pageIds = selectedPageIds) {
     if (!localValue) {
       setStatus("Cần chọn ngày giờ cụ thể trước khi lên lịch.");
       return;
     }
+    const targetPageIds = pageIds.length ? pageIds : [post.pageId];
     const response = await fetch(`/api/content/posts/${encodeURIComponent(post.id)}/schedule`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ scheduledAt: toIsoFromLocal(localValue), pageIds: selectedPageIds })
+      body: JSON.stringify({ scheduledAt: toIsoFromLocal(localValue), pageIds: targetPageIds })
     });
     const payload = (await response.json()) as { success: boolean; error?: string };
     setStatus(payload.success ? "Đã lên lịch và tạo job riêng từng Fanpage." : payload.error || "Lên lịch lỗi.");
+    setScheduleDraft(null);
     await loadPlanner();
   }
 
   async function publishPost(post: ContentPost, pageIds = selectedPageIds) {
+    const targetPageIds = pageIds.length ? pageIds : [post.pageId];
     const response = await fetch(`/api/content/posts/${encodeURIComponent(post.id)}/publish`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pageIds, publishNow: true })
+      body: JSON.stringify({ pageIds: targetPageIds, publishNow: true })
     });
     const payload = (await response.json()) as {
       success: boolean;
-      data?: { jobs: Array<{ dryRun: boolean }> };
+      data?: { jobs: PublishJobPreview[] };
       error?: string;
     };
     if (payload.success && payload.data) {
+      setPublishJobs(payload.data.jobs);
       const dryRun = payload.data.jobs.every((job) => job.dryRun);
       setStatus(dryRun ? "Đã tạo publish job dry-run vì AUTO_PUBLISH_POSTS_ENABLED=false." : "Đã gửi publish job thật.");
     } else {
@@ -173,6 +196,14 @@ export function ContentPlannerContent() {
 
   async function saveEdit() {
     if (!editing) return;
+    if (!editing.productSku) {
+      setStatus("Cần chọn sản phẩm thật đã sync khi chỉnh sửa bài.");
+      return;
+    }
+    if (editing.pageIds.length === 0) {
+      setStatus("Cần chọn ít nhất một Fanpage khi chỉnh sửa bài.");
+      return;
+    }
     const response = await fetch(`/api/content/posts/${encodeURIComponent(editing.id)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -180,11 +211,14 @@ export function ContentPlannerContent() {
         title: editing.title,
         caption: editing.caption,
         cta: editing.cta,
+        productSku: editing.productSku,
+        pageId: editing.pageIds[0],
+        pageIds: editing.pageIds,
         scheduledAt: editing.scheduledAt ? toIsoFromLocal(editing.scheduledAt) : null
       })
     });
     const payload = (await response.json()) as { success: boolean; error?: string };
-    setStatus(payload.success ? "Đã lưu chỉnh sửa bài." : payload.error || "Lưu chỉnh sửa lỗi.");
+    setStatus(payload.success ? "Đã lưu chỉnh sửa bài vào D1." : payload.error || "Lưu chỉnh sửa lỗi.");
     setEditing(null);
     await loadPlanner();
   }
@@ -192,7 +226,8 @@ export function ContentPlannerContent() {
   async function deletePost(post: ContentPost) {
     const response = await fetch(`/api/content/posts/${encodeURIComponent(post.id)}`, { method: "DELETE" });
     const payload = (await response.json()) as { success: boolean; error?: string };
-    setStatus(payload.success ? "Đã xóa bài draft/scheduled." : payload.error || "Xóa bài lỗi.");
+    setStatus(payload.success ? "Đã xóa bài draft/scheduled khỏi D1." : payload.error || "Xóa bài lỗi.");
+    setDeleteCandidate(null);
     await loadPlanner();
   }
 
@@ -200,6 +235,19 @@ export function ContentPlannerContent() {
     if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
     setMediaFile(file);
     setMediaPreviewUrl(file ? URL.createObjectURL(file) : "");
+  }
+
+  function startEdit(post: ContentPost) {
+    const pageIds = selectedPageIds.length ? selectedPageIds : [post.pageId];
+    setEditing({
+      id: post.id,
+      title: post.title,
+      caption: post.caption,
+      cta: post.cta,
+      productSku: post.productSku ?? "",
+      pageIds,
+      scheduledAt: localFromIso(post.scheduledAt) || scheduledAt
+    });
   }
 
   useEffect(() => {
@@ -230,7 +278,7 @@ export function ContentPlannerContent() {
 
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-soft">
         <StatusPill tone="info">Publish job theo Page</StatusPill>
-        <StatusPill tone="warning">Có dry-run khi chưa bật publish thật</StatusPill>
+        <StatusPill tone="warning">Dry-run khi chưa bật publish thật</StatusPill>
         <span className="text-sm text-slate-600">{status}</span>
       </div>
 
@@ -295,16 +343,31 @@ export function ContentPlannerContent() {
 
       <ContentPlannerPostList
         posts={posts}
+        pages={pages}
         selectedPageIds={selectedPageIds}
-        scheduledAt={scheduledAt}
+        publishJobs={publishJobs}
         editing={editing}
-        onStartEdit={(post) => setEditing({ id: post.id, title: post.title, caption: post.caption, cta: post.cta, scheduledAt: localFromIso(post.scheduledAt) || scheduledAt })}
+        scheduleDraft={scheduleDraft}
+        deleteCandidate={deleteCandidate}
+        onStartEdit={startEdit}
         onEditChange={(patch) => setEditing((current) => (current ? { ...current, ...patch } : current))}
+        onEditPageToggle={(pageId, checked) =>
+          setEditing((current) =>
+            current
+              ? { ...current, pageIds: checked ? [...new Set([...current.pageIds, pageId])] : current.pageIds.filter((id) => id !== pageId) }
+              : current
+          )
+        }
         onCancelEdit={() => setEditing(null)}
         onSaveEdit={() => void saveEdit()}
-        onSchedule={(post) => void schedulePost(post, editing?.id === post.id ? editing.scheduledAt : scheduledAt)}
+        onOpenSchedule={(post) => setScheduleDraft({ id: post.id, title: post.title, scheduledAt: localFromIso(post.scheduledAt) || scheduledAt })}
+        onScheduleChange={(value) => setScheduleDraft((current) => (current ? { ...current, scheduledAt: value } : current))}
+        onCancelSchedule={() => setScheduleDraft(null)}
+        onSaveSchedule={(post) => void schedulePost(post, scheduleDraft?.scheduledAt || scheduledAt)}
         onPublish={(post) => void publishPost(post)}
-        onDelete={(post) => void deletePost(post)}
+        onRequestDelete={setDeleteCandidate}
+        onCancelDelete={() => setDeleteCandidate(null)}
+        onConfirmDelete={(post) => void deletePost(post)}
       />
     </div>
   );

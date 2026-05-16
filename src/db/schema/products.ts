@@ -17,6 +17,9 @@ export const productCache = sqliteTable("product_cache", {
   imageUrl: text("image_url"),
   description: text("description"),
   status: text("status").notNull().default("active"),
+  source: text("source").notNull().default("ecommerce_external_products"),
+  rawPayloadJson: text("raw_payload_json").notNull().default("{}"),
+  missingFromSource: integer("missing_from_source", { mode: "boolean" }).notNull().default(false),
   priceUpdatedAt: text("price_updated_at"),
   syncedAt: text("synced_at").notNull()
 });

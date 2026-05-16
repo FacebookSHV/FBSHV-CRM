@@ -1,7 +1,7 @@
 import { getD1Database } from "@/lib/db";
 import { generateAiText } from "@/lib/ai/provider";
 import { deleteContentMediaForPost } from "@/lib/content-media";
-import { getEcommerceProvider } from "@/lib/ecommerce/provider";
+import { readCachedProducts } from "@/lib/ecommerce/cache";
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { getFacebookStore } from "@/lib/facebook/store";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
@@ -132,10 +132,10 @@ async function defaultPageId() {
 
 export async function generateContentIdeas(limit = 7, pageId?: string) {
   const targetPageId = pageId || (await defaultPageId());
-  const products = await getEcommerceProvider().getProducts({ limit });
-  if (!products.success) return { success: false as const, error: products.error };
+  const products = await readCachedProducts({ limit });
+  if (products.length === 0) return { success: false as const, error: "Chưa có sản phẩm đã sync trong D1. Hãy bấm Đồng bộ ở trang Sản phẩm trước." };
   const ideas = await Promise.all(
-    products.data
+    products
       .slice(0, limit)
       .map((product, index) => ideaFromProduct(product, targetPageId, CONTENT_TEMPLATES[index % CONTENT_TEMPLATES.length]))
   );
@@ -182,7 +182,8 @@ export async function createContentPost(input: Partial<ContentPost>) {
       `insert into content_posts
       (id, workspace_id, page_id, product_sku, template, title, caption, cta, media_suggestion, scheduled_at, status, external_post_id, error, created_at, updated_at)
       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      on conflict(id) do update set title = excluded.title, caption = excluded.caption, cta = excluded.cta,
+      on conflict(id) do update set page_id = excluded.page_id, product_sku = excluded.product_sku,
+      title = excluded.title, caption = excluded.caption, cta = excluded.cta,
       media_suggestion = excluded.media_suggestion, scheduled_at = excluded.scheduled_at, status = excluded.status,
       error = excluded.error, updated_at = excluded.updated_at`
     )

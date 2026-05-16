@@ -1,9 +1,9 @@
 import { AiAssistantContent } from "@/components/ai/ai-assistant-content";
-import { getEcommerceProvider } from "@/lib/ecommerce/provider";
+import { readCachedProducts } from "@/lib/ecommerce/cache";
 
 export const dynamic = "force-dynamic";
 
 export default async function AiAssistantPage() {
-  const result = await getEcommerceProvider().getProducts();
-  return <AiAssistantContent products={result.success ? result.data : []} />;
+  const products = await readCachedProducts({ limit: 20 });
+  return <AiAssistantContent products={products} />;
 }

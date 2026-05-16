@@ -20,6 +20,16 @@ type RuntimeStatus = {
   webhook: { verifyTokenConfigured: boolean; facebookCallback: string; facebookWebhook: string };
 };
 
+type AiTestResult = {
+  valid: boolean;
+  provider: string;
+  keyName: string;
+  masked?: string;
+  status: string;
+  message: string;
+  model: string;
+};
+
 type ApiEnvelope<T> = { success: true; data: T } | { success: false; error?: string };
 
 function tone(ok: boolean) {
@@ -30,10 +40,18 @@ function statusLabel(ok: boolean) {
   return ok ? "Đã cấu hình" : "Cần kiểm tra";
 }
 
+function runtimeModeLabel(mode: string) {
+  if (mode === "mock") return "chưa kết nối thật";
+  if (mode === "real") return "real";
+  if (mode === "not_enabled") return "chưa bật";
+  return mode;
+}
+
 export function SettingsContent() {
   const [status, setStatus] = useState<RuntimeStatus | null>(null);
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("Đang tải cấu hình runtime...");
+  const [testResults, setTestResults] = useState<AiTestResult[]>([]);
 
   async function loadStatus() {
     const response = await fetch("/api/settings/runtime", { cache: "no-store" });
@@ -69,8 +87,30 @@ export function SettingsContent() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ keyName, value: keys[keyName]?.trim() || undefined })
     });
-    const payload = (await response.json().catch(() => null)) as ApiEnvelope<{ valid: boolean; notice?: string }> | null;
-    setMessage(response.ok && payload?.success ? payload.data.notice || "Test AI key thành công." : payload && !payload.success ? payload.error ?? "Test key lỗi." : "Test key lỗi.");
+    const payload = (await response.json().catch(() => null)) as ApiEnvelope<AiTestResult> | null;
+    if (response.ok && payload?.success) {
+      setTestResults([payload.data]);
+      setMessage(`${payload.data.keyName} (${payload.data.masked ?? "masked"}): ${payload.data.status} - ${payload.data.message}`);
+    } else {
+      setMessage(payload && !payload.success ? payload.error ?? "Test key lỗi." : "Test key lỗi.");
+    }
+    await loadStatus();
+  }
+
+  async function testAllKeys() {
+    const response = await fetch("/api/settings/ai-providers/test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ all: true })
+    });
+    const payload = (await response.json().catch(() => null)) as ApiEnvelope<{ results: AiTestResult[]; tested: number }> | null;
+    if (response.ok && payload?.success) {
+      setTestResults(payload.data.results);
+      const validCount = payload.data.results.filter((result) => result.valid).length;
+      setMessage(`Đã test ${payload.data.tested} AI key: ${validCount} valid, ${payload.data.tested - validCount} lỗi có phân loại.`);
+    } else {
+      setMessage(payload && !payload.success ? payload.error ?? "Test tất cả key lỗi." : "Test tất cả key lỗi.");
+    }
     await loadStatus();
   }
 
@@ -102,13 +142,13 @@ export function SettingsContent() {
               title="Facebook/Meta"
               icon={<PlugZap />}
               ok={status.facebook.configured}
-              lines={[`Mode: ${status.facebook.mode}`, `App ID: ${status.facebook.appId || "chưa có"}`, `Redirect: ${status.facebook.redirectUri}`, status.facebook.missing.length ? `Thiếu: ${status.facebook.missing.join(", ")}` : "Không thiếu biến bắt buộc"]}
+              lines={[`Mode: ${runtimeModeLabel(status.facebook.mode)}`, `App ID: ${status.facebook.appId || "chưa có"}`, `Redirect: ${status.facebook.redirectUri}`, status.facebook.missing.length ? `Thiếu: ${status.facebook.missing.join(", ")}` : "Không thiếu biến bắt buộc"]}
             />
             <StatusCard
               title="Web Quản Lý TMĐT"
               icon={<CheckCircle2 />}
               ok={status.ecommerce.configured && status.ecommerce.mode === "real"}
-              lines={[`Mode: ${status.ecommerce.mode}`, `Base URL: ${status.ecommerce.baseUrl || "chưa có"}`]}
+              lines={[`Mode: ${runtimeModeLabel(status.ecommerce.mode)}`, `Base URL: ${status.ecommerce.baseUrl || "chưa có"}`]}
             />
             <StatusCard
               title="Cloudflare runtime"
@@ -137,12 +177,18 @@ export function SettingsContent() {
           </section>
 
           <section className="mt-4 rounded-md border border-slate-200 bg-white p-4 shadow-soft">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-ink">AI Providers</h2>
                 <p className="mt-1 text-sm text-slate-600">Nhập GEMINI_API_KEY_1 đến GEMINI_API_KEY_5 hoặc OpenAI key. Key lưu vào D1 sẽ được mã hóa.</p>
               </div>
-              <StatusPill tone={tone(status.ai.configured)}>{statusLabel(status.ai.configured)}</StatusPill>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusPill tone={tone(status.ai.configured)}>{statusLabel(status.ai.configured)}</StatusPill>
+                <button type="button" onClick={() => void testAllKeys()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 focus-ring">
+                  <TestTube2 className="h-4 w-4" aria-hidden="true" />
+                  Test tất cả key
+                </button>
+              </div>
             </div>
 
             <div className="mt-4 grid gap-3">
@@ -178,6 +224,20 @@ export function SettingsContent() {
                 );
               })}
             </div>
+
+            {testResults.length > 0 ? (
+              <div className="mt-4 grid gap-2">
+                {testResults.map((result) => (
+                  <div key={`${result.keyName}-${result.status}`} className="grid gap-2 rounded-md border border-slate-200 p-3 text-sm sm:grid-cols-[1fr_auto]">
+                    <div>
+                      <div className="font-semibold text-ink">{result.keyName} · {result.masked ?? "masked"} · {result.model}</div>
+                      <div className="mt-1 text-slate-600">{result.message}</div>
+                    </div>
+                    <StatusPill tone={result.valid ? "success" : "danger"}>{result.status}</StatusPill>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </section>
         </>
       ) : null}

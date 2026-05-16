@@ -1,4 +1,5 @@
 import { fail, failFromError, ok } from "@/lib/api-response";
+import { replaceContentPostTargets } from "@/lib/content-publishing";
 import { deleteContentPost, updateContentPost } from "@/lib/content-planner";
 import type { ContentPost } from "@/lib/content-planner";
 
@@ -7,11 +8,13 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown> & { pageIds?: string[] };
   try {
     const post = await updateContentPost(id, body as Partial<ContentPost>);
     if (!post) return fail("Không tìm thấy bài viết.", 404, "CONTENT_POST_NOT_FOUND");
-    return ok({ post });
+    const pageIds = Array.isArray(body.pageIds) && body.pageIds.length > 0 ? body.pageIds : [post.pageId];
+    await replaceContentPostTargets(id, pageIds);
+    return ok({ post, pageIds });
   } catch (error) {
     return failFromError(error);
   }

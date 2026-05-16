@@ -25,7 +25,7 @@ type ContentPlannerEditorProps = {
   onSave: (mode: "draft" | "schedule" | "publish") => void;
 };
 
-const goldenHours = [
+export const goldenHours = [
   { label: "Sáng", range: "08:00-09:30", time: "08:00" },
   { label: "Trưa", range: "11:00-12:30", time: "11:00" },
   { label: "Tối", range: "19:30-21:30", time: "19:30" }
@@ -36,12 +36,35 @@ function datetimeLocalValue(date: Date) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function nextGoldenHour(time: string) {
+export function nextGoldenHour(time: string) {
   const [hour, minute] = time.split(":").map(Number);
   const date = new Date();
   date.setHours(hour ?? 8, minute ?? 0, 0, 0);
   if (date.getTime() <= Date.now()) date.setDate(date.getDate() + 1);
   return datetimeLocalValue(date);
+}
+
+export function GoldenHourButtons({ onSelect }: { onSelect: (value: string) => void }) {
+  return (
+    <div>
+      <div className="text-sm font-medium text-slate-700">Giờ vàng</div>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {goldenHours.map((item) => (
+          <button
+            type="button"
+            key={item.label}
+            onClick={() => onSelect(nextGoldenHour(item.time))}
+            className="inline-flex min-h-11 flex-col items-center justify-center rounded-md border border-slate-200 px-2 text-xs font-semibold text-slate-700 focus-ring hover:bg-slate-50"
+            title={item.range}
+          >
+            <Clock3 className="mb-1 h-4 w-4" aria-hidden="true" />
+            <span>{item.label}</span>
+            <span className="font-normal text-slate-500">{item.range}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function ContentPlannerEditor({
@@ -119,24 +142,7 @@ export function ContentPlannerEditor({
             />
           </label>
 
-          <div>
-            <div className="text-sm font-medium text-slate-700">Giờ vàng</div>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {goldenHours.map((item) => (
-                <button
-                  type="button"
-                  key={item.label}
-                  onClick={() => onScheduledAtChange(nextGoldenHour(item.time))}
-                  className="inline-flex min-h-11 flex-col items-center justify-center rounded-md border border-slate-200 px-2 text-xs font-semibold text-slate-700 focus-ring hover:bg-slate-50"
-                  title={item.range}
-                >
-                  <Clock3 className="mb-1 h-4 w-4" aria-hidden="true" />
-                  <span>{item.label}</span>
-                  <span className="font-normal text-slate-500">{item.range}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <GoldenHourButtons onSelect={onScheduledAtChange} />
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Ảnh/video đăng bài</span>

@@ -26,8 +26,10 @@ function isEnvelope<T>(value: unknown): value is ApiEnvelope<T> {
 export function OrderBuilder({ products }: OrderBuilderProps) {
   const [sku, setSku] = useState(products[0]?.sku ?? "");
   const [quantity, setQuantity] = useState(1);
+  const [customerId, setCustomerId] = useState("");
+  const [conversationId, setConversationId] = useState("");
   const [message, setMessage] = useState<StepMessage>({
-    text: "Chọn SKU từ ProductCache rồi kiểm tồn trước khi tạo đơn.",
+    text: "Chọn SKU từ D1 product_cache rồi kiểm tồn trước khi tạo đơn.",
     tone: "info"
   });
   const [loading, setLoading] = useState(false);
@@ -62,10 +64,14 @@ export function OrderBuilder({ products }: OrderBuilderProps) {
   }
 
   async function createOrder() {
+    if (!customerId.trim()) {
+      setMessage({ text: "Cần nhập customerId thật từ CRM/inbox trước khi tạo đơn ngoài.", tone: "warning" });
+      return;
+    }
     setLoading(true);
     const { response, payload } = await postJson("/api/ecommerce/orders/from-facebook", {
-      customerId: "customer-demo",
-      conversationId: "conversation-demo",
+      customerId: customerId.trim(),
+      conversationId: conversationId.trim() || undefined,
       sku,
       quantity,
       note: "Đơn tạo từ khung CRM Facebook"
@@ -123,6 +129,24 @@ export function OrderBuilder({ products }: OrderBuilderProps) {
                 className="mt-1 min-h-11 w-full rounded-md border border-slate-200 px-3 text-sm focus-ring"
               />
             </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Customer ID thật</span>
+              <input
+                value={customerId}
+                onChange={(event) => setCustomerId(event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-md border border-slate-200 px-3 text-sm focus-ring"
+                placeholder="Lấy từ inbox/CRM"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Conversation ID nếu có</span>
+              <input
+                value={conversationId}
+                onChange={(event) => setConversationId(event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-md border border-slate-200 px-3 text-sm focus-ring"
+                placeholder="Không bắt buộc"
+              />
+            </label>
           </div>
           {selected ? (
             <div className="mt-4 grid gap-3 rounded-md bg-slate-50 p-3 text-sm sm:grid-cols-3">
@@ -134,8 +158,8 @@ export function OrderBuilder({ products }: OrderBuilderProps) {
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
-              disabled={loading}
-              onClick={checkInventory}
+              disabled={loading || !sku}
+              onClick={() => void checkInventory()}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-200 px-4 text-sm font-semibold text-slate-700 focus-ring hover:bg-slate-50"
             >
               <ShieldCheck className="h-4 w-4" aria-hidden="true" />
@@ -143,9 +167,9 @@ export function OrderBuilder({ products }: OrderBuilderProps) {
             </button>
             <button
               type="button"
-              disabled={loading}
-              onClick={createOrder}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white focus-ring hover:bg-brand-700"
+              disabled={loading || !sku}
+              onClick={() => void createOrder()}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white focus-ring hover:bg-brand-700 disabled:opacity-50"
             >
               <PackageCheck className="h-4 w-4" aria-hidden="true" />
               Tạo đơn ngoài
@@ -159,7 +183,7 @@ export function OrderBuilder({ products }: OrderBuilderProps) {
           <ClipboardCheck className="h-8 w-8 text-brand-600" aria-hidden="true" />
           <h2 className="mt-3 text-sm font-semibold text-ink">Luồng an toàn</h2>
           <ol className="mt-3 space-y-3 text-sm leading-6 text-slate-600">
-            <li>1. Chọn khách hàng/hội thoại và sản phẩm cache.</li>
+            <li>1. Chọn khách hàng/hội thoại thật và sản phẩm cache.</li>
             <li>2. Gọi API kiểm tồn realtime từ Web Quản Lý TMĐT.</li>
             <li>3. Chỉ giữ hàng/tạo đơn khi API ngoài xác nhận thành công.</li>
           </ol>
