@@ -21,15 +21,21 @@ const requiredWrite = ["ads_management"];
 export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadiness }) {
   const [readiness, setReadiness] = useState(initialReadiness);
   const [status, setStatus] = useState("Ads chỉ đọc account thật từ Meta, không hiển thị ad account giả.");
+  const [refreshing, setRefreshing] = useState(false);
 
   async function refreshAccounts() {
-    const response = await fetch("/api/ads/accounts/refresh", { method: "POST" });
-    const payload = (await response.json().catch(() => null)) as ApiEnvelope<{ synced: number; accounts: AdsReadiness }> | null;
-    if (response.ok && payload?.success) {
-      setReadiness(payload.data.accounts);
-      setStatus(`Đã cache ${payload.data.synced} ad account thật từ Meta.`);
-    } else {
-      setStatus(payload && !payload.success ? payload.error ?? "Kiểm Ads account lỗi." : "Kiểm Ads account lỗi.");
+    setRefreshing(true);
+    try {
+      const response = await fetch("/api/ads/accounts/refresh", { method: "POST" });
+      const payload = (await response.json().catch(() => null)) as ApiEnvelope<{ synced: number; accounts: AdsReadiness }> | null;
+      if (response.ok && payload?.success) {
+        setReadiness(payload.data.accounts);
+        setStatus(`Đã cập nhật ${payload.data.synced} tài khoản quảng cáo thật từ Meta.`);
+      } else {
+        setStatus(payload && !payload.success ? payload.error ?? "Kiểm tra tài khoản quảng cáo lỗi." : "Kiểm tra tài khoản quảng cáo lỗi.");
+      }
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -47,8 +53,8 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
               <PlugZap className="h-4 w-4" aria-hidden="true" />
               Connect Ads Account
             </a>
-            <button type="button" onClick={() => void refreshAccounts()} className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 focus-ring" aria-label="Kiểm tra lại Ads" title="Kiểm tra lại Ads">
-              <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+            <button type="button" disabled={refreshing} onClick={() => void refreshAccounts()} className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 focus-ring disabled:cursor-not-allowed disabled:opacity-50" aria-label="Kiểm tra lại Ads" title="Kiểm tra lại Ads">
+              <RefreshCcw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
             </button>
           </div>
         }
@@ -83,14 +89,14 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
             <Link
               key={account.id}
               href={`/ads/accounts/${encodeURIComponent(account.externalAccountId)}`}
-              className="group rounded-md border border-slate-200 bg-white p-4 shadow-soft focus-ring hover:border-brand-200 hover:bg-brand-50/40"
+              className="group min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white p-4 shadow-soft focus-ring hover:border-brand-200 hover:bg-brand-50/40"
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="truncate text-sm font-semibold text-ink">{account.name}</h3>
-                  <p className="mt-1 text-xs text-slate-500">{account.externalAccountId}</p>
+                <div className="min-w-0 flex-1">
+                  <h3 className="break-words text-sm font-semibold text-ink">{account.name}</h3>
+                  <p className="mt-1 break-all text-xs text-slate-500">{account.externalAccountId}</p>
                 </div>
-                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-brand-700" aria-hidden="true" />
+                <ChevronRight className="h-5 w-5 flex-none text-slate-400 group-hover:text-brand-700" aria-hidden="true" />
               </div>
               <div className="mt-3"><StatusPill tone="info">{account.status}</StatusPill></div>
             </Link>

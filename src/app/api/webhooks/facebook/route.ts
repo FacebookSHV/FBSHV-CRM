@@ -1,6 +1,6 @@
 import { fail, failFromError, ok } from "@/lib/api-response";
 import { runFacebookAutomation } from "@/lib/facebook/automation";
-import { getFacebookRuntimeConfig } from "@/lib/facebook/env";
+import { getFacebookRuntimeConfigAsync } from "@/lib/facebook/env";
 import { persistParsedFacebookEvent } from "@/lib/facebook/operations";
 import {
   parseFacebookWebhookPayload,
@@ -9,14 +9,14 @@ import {
 } from "@/lib/facebook/webhook";
 
 export async function GET(request: Request) {
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   const verified = verifyFacebookWebhookChallenge(new URL(request.url), config.verifyToken);
   if (!verified.ok) return new Response("Forbidden", { status: 403 });
   return new Response(verified.challenge, { status: 200 });
 }
 
 export async function POST(request: Request) {
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   const rawBody = await request.text();
   const signature = request.headers.get("x-hub-signature-256");
 

@@ -3,7 +3,7 @@ import type { FacebookPageFromGraph, FacebookRuntimeConfig, FacebookSendResult }
 type GraphTokenResponse = {
   access_token?: string;
   expires_in?: number;
-  error?: { message?: string };
+  error?: { message?: string; code?: number; type?: string };
 };
 
 type GraphPageResponse = {
@@ -46,6 +46,26 @@ async function readGraphJson<T>(response: Response): Promise<T> {
     throw new Error(payload.error?.message || "Meta Graph API trả lỗi.");
   }
   return payload;
+}
+
+export async function verifyMetaAppSecret(config: FacebookRuntimeConfig) {
+  if (!config.appId || !config.appSecret) {
+    return { valid: false as const, error: "missing_app_id_or_secret" };
+  }
+
+  const url = new URL("https://graph.facebook.com/oauth/access_token");
+  url.searchParams.set("client_id", config.appId);
+  url.searchParams.set("client_secret", config.appSecret);
+  url.searchParams.set("grant_type", "client_credentials");
+  const response = await fetch(url);
+  const payload = (await response.json().catch(() => ({}))) as GraphTokenResponse;
+  if (response.ok && payload.access_token) return { valid: true as const };
+  return {
+    valid: false as const,
+    error: payload.error?.message || "Meta không xác thực App Secret.",
+    code: payload.error?.code,
+    type: payload.error?.type
+  };
 }
 
 export class MetaGraphFacebookClient implements FacebookClient {

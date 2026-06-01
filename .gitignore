@@ -12,7 +12,11 @@ coverage/
 .env.*
 *.local
 profiles.json
+profiles.local.json
+switch github/
 GITHUB VÀ CLOUDFARE*.txt
+quy trình gửi codex xử lý lỗi .txt
+*.exe
 
 *.sql
 !drizzle/*.sql

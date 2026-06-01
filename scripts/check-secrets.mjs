@@ -11,11 +11,13 @@ const excludedDirs = new Set([
   "build",
   "coverage",
   "dist",
-  "node_modules"
+  "node_modules",
+  "switch github"
 ]);
 
 const skippedFiles = [
   /^package-lock\.json$/,
+  /^profiles\.local\.json$/,
   /^tsconfig\.tsbuildinfo$/,
   /^drizzle\/meta\//,
   /^backup_.*\.sql$/i,

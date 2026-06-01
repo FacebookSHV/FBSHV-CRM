@@ -1,4 +1,4 @@
-import { getFacebookRuntimeConfig } from "./env";
+import { getFacebookRuntimeConfigAsync } from "./env";
 import { blockedMetaPermission, withMetaPermission } from "./permissions";
 import { getFacebookStore } from "./store";
 import { decryptToken } from "./token-crypto";
@@ -14,7 +14,7 @@ function graphUrl(version: string, path: string) {
 }
 
 async function getPageToken(pageId: string) {
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   if (process.env.AUTO_PUBLISH_POSTS_ENABLED !== "true") {
     throw new Error("AUTO_PUBLISH_POSTS_DISABLED");
   }

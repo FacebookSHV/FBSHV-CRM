@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { POST as createAdDraftRoute } from "@/app/api/ads/accounts/[accountId]/drafts/route";
+import { GET as listFacebookPages } from "@/app/api/facebook/pages/route";
 import {
   buildCalendarSuggestions,
   createContentPost,
@@ -102,5 +104,26 @@ describe("growth modules", () => {
     expect(readiness.status).toBe("blocked");
     expect(readiness.missingPermissions).toContain("ads_read");
     await expect(publishAdDraft("draft_test")).rejects.toThrow("AD_WRITE_ACTIONS_DISABLED");
+  });
+
+  it("API Fanpage public không trả token đã mã hóa ra trình duyệt", async () => {
+    const response = await listFacebookPages();
+    const payload = await response.json() as { data: { pages: Array<Record<string, unknown>> } };
+    expect(payload.data.pages).toHaveLength(1);
+    expect(payload.data.pages[0]).not.toHaveProperty("pageAccessTokenEncrypted");
+    expect(payload.data.pages[0]).not.toHaveProperty("connectionId");
+  });
+
+  it("API Ads draft chặn ngân sách âm trước khi lưu", async () => {
+    const response = await createAdDraftRoute(
+      new Request("http://localhost/api/ads/accounts/act_test/drafts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Draft test", budgetDaily: -1 })
+      }),
+      { params: Promise.resolve({ accountId: "act_test" }) }
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ success: false, code: "INVALID_AD_DRAFT" });
   });
 });

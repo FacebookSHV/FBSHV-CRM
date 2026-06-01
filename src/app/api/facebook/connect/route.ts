@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { fail } from "@/lib/api-response";
-import { assertFacebookReady, getFacebookRuntimeConfig } from "@/lib/facebook/env";
+import { assertFacebookReady, getFacebookRuntimeConfigAsync } from "@/lib/facebook/env";
 import { buildFacebookOAuthUrl, createOAuthState, scopesForOAuthIntent } from "@/lib/facebook/oauth";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
 
 export async function GET(request: Request) {
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   const url = new URL(request.url);
   const intent = url.searchParams.get("intent") === "ads" ? "ads" as const : "base" as const;
   const state = createOAuthState(DEFAULT_WORKSPACE_ID, intent);

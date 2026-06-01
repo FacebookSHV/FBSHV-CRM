@@ -1,7 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getAiConfig } from "@/lib/ai/provider";
 import { getEcommerceProvider } from "@/lib/ecommerce/provider";
-import { getFacebookRuntimeConfig } from "@/lib/facebook/env";
+import { getFacebookRuntimeConfigAsync } from "@/lib/facebook/env";
 import { getAdsReadiness } from "@/lib/facebook/ads";
 import { listAiProviderPublicStatus } from "./ai-keys";
 
@@ -20,7 +20,7 @@ async function getBindings() {
 }
 
 export async function getRuntimeSettingsStatus() {
-  const facebook = getFacebookRuntimeConfig();
+  const facebook = await getFacebookRuntimeConfigAsync();
   const ai = await listAiProviderPublicStatus();
   const ads = await getAdsReadiness();
   const bindings = await getBindings();

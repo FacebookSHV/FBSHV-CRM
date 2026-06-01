@@ -1,5 +1,5 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { getFacebookRuntimeConfig } from "./env";
+import { getFacebookRuntimeConfigAsync } from "./env";
 import type {
   CommentRecord,
   ConversationRecord,
@@ -222,6 +222,11 @@ export class MemoryFacebookStore implements FacebookStore {
   }
 
   async upsertConnection(record: FacebookConnectionRecord) {
+    for (const [id, current] of this.connections.entries()) {
+      if (current.workspaceId === record.workspaceId && current.facebookUserId === record.facebookUserId && id !== record.id) {
+        this.connections.delete(id);
+      }
+    }
     this.connections.set(record.id, record);
   }
 
@@ -339,8 +344,10 @@ class D1FacebookStore implements FacebookStore {
       `insert into facebook_connections
       (id, workspace_id, connected_by_user_id, facebook_user_id, access_token_encrypted, token_expires_at, scopes, status, created_at, updated_at)
       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      on conflict(id) do update set access_token_encrypted = excluded.access_token_encrypted, token_expires_at = excluded.token_expires_at,
-      scopes = excluded.scopes, status = excluded.status, updated_at = excluded.updated_at`,
+      on conflict(workspace_id, facebook_user_id) do update set id = excluded.id,
+      connected_by_user_id = excluded.connected_by_user_id, access_token_encrypted = excluded.access_token_encrypted,
+      token_expires_at = excluded.token_expires_at, scopes = excluded.scopes, status = excluded.status,
+      updated_at = excluded.updated_at`,
       record.id,
       record.workspaceId,
       record.connectedByUserId ?? null,
@@ -632,7 +639,7 @@ export async function getFacebookStore(): Promise<FacebookStore> {
     // NEO: Local dev/test không có D1 binding thì dùng store mock an toàn.
   }
 
-  if (getFacebookRuntimeConfig().mode === "real") {
+  if ((await getFacebookRuntimeConfigAsync()).mode === "real") {
     throw new Error("BLOCKED_BY_MISSING_BINDING: DB");
   }
 

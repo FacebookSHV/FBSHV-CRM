@@ -1,7 +1,7 @@
 import { getD1Database } from "@/lib/db";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
 import { blockedMetaPermission } from "./permissions";
-import { getFacebookRuntimeConfig } from "./env";
+import { getFacebookRuntimeConfigAsync } from "./env";
 import { decryptToken } from "./token-crypto";
 
 export type AdsReadiness = {
@@ -62,7 +62,7 @@ async function latestConnection() {
 
 async function getAdsAccessToken() {
   await getAdsReadiness({ strict: true });
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   if (config.mode !== "real") throw blockedMetaPermission("ads_read,business_management");
   const connection = await latestConnection();
   if (!connection) throw blockedMetaPermission("ads_read,business_management");
@@ -147,7 +147,7 @@ export async function syncAdAccountsFromMeta() {
   void readiness;
   const db = await getD1Database();
   if (!db) throw new Error("BLOCKED_BY_MISSING_BINDING: DB");
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   if (config.mode !== "real") throw blockedMetaPermission("ads_read,business_management");
   const connection = await latestConnection();
   if (!connection) throw blockedMetaPermission("ads_read,business_management");
@@ -336,7 +336,17 @@ async function requireAdsWrite() {
   if (missingWrite.length > 0) throw blockedMetaPermission(missingWrite.join(","));
 }
 
-export async function createAdDraft(input: { sourcePostId?: string; adAccountId?: string; name?: string; budgetDaily?: number }) {
+export async function createAdDraft(input: {
+  sourcePostId?: string;
+  adAccountId?: string;
+  name?: string;
+  budgetDaily?: number;
+  objective?: string;
+  schedule?: string;
+  audience?: string;
+  creativeText?: string;
+  productSku?: string;
+}) {
   const db = await getD1Database();
   const now = nowIso();
   const draft = {

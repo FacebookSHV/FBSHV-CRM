@@ -1,5 +1,5 @@
 import { createFacebookClient } from "./client";
-import { assertFacebookReady, getFacebookRuntimeConfig } from "./env";
+import { assertFacebookReady, getFacebookRuntimeConfigAsync } from "./env";
 import { intentFromOAuthState, scopesForOAuthIntent } from "./oauth";
 import { createMockEncryptedToken, decryptToken, encryptToken } from "./token-crypto";
 import type {
@@ -25,7 +25,7 @@ function idFrom(prefix: string, value: string) {
 }
 
 export async function connectFacebookFromCode(code: string, state?: string) {
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   const readiness = assertFacebookReady(config);
   if (!readiness.ok) return { success: false as const, error: readiness.error };
 
@@ -85,7 +85,7 @@ async function getPageToken(page: FacebookPageRecord, config: FacebookRuntimeCon
 }
 
 export async function subscribeFacebookPage(pageId: string) {
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   const readiness = assertFacebookReady(config);
   if (!readiness.ok) return { success: false as const, error: readiness.error };
 
@@ -261,7 +261,7 @@ export async function persistParsedFacebookEvent(event: ParsedFacebookWebhookEve
 }
 
 export async function sendMessengerReply(conversationId: string, message: string) {
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   const readiness = assertFacebookReady(config);
   if (!readiness.ok) return { success: false as const, error: readiness.error };
 
@@ -305,7 +305,7 @@ export async function sendMessengerReply(conversationId: string, message: string
 }
 
 export async function replyFacebookComment(commentId: string, message: string) {
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   const readiness = assertFacebookReady(config);
   if (!readiness.ok) return { success: false as const, error: readiness.error };
 
@@ -324,7 +324,7 @@ export async function replyFacebookComment(commentId: string, message: string) {
 }
 
 export async function setFacebookCommentHidden(commentId: string, hidden: boolean) {
-  const config = getFacebookRuntimeConfig();
+  const config = await getFacebookRuntimeConfigAsync();
   const readiness = assertFacebookReady(config);
   if (!readiness.ok) return { success: false as const, error: readiness.error };
 

@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join, relative } from "node:path";
 
 const root = process.cwd();
@@ -29,13 +30,27 @@ function extname(path) {
   return index >= 0 ? path.slice(index).toLowerCase() : "";
 }
 
+function isIgnoredLocalFile(path) {
+  const normalized = relative(root, path).replaceAll("\\", "/");
+  const tracked = spawnSync("git", ["ls-files", "--error-unmatch", "--", normalized], {
+    cwd: root,
+    stdio: "ignore"
+  });
+  if (tracked.status === 0) return false;
+  const ignored = spawnSync("git", ["check-ignore", "-q", "--", normalized], {
+    cwd: root,
+    stdio: "ignore"
+  });
+  return ignored.status === 0;
+}
+
 function walk(dir, files = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory() && excludedDirs.has(entry.name)) continue;
     const fullPath = join(dir, entry.name);
     if (relative(root, fullPath).replaceAll("\\", "/").startsWith("drizzle/meta")) continue;
     if (entry.isDirectory()) walk(fullPath, files);
-    else if (extensions.has(extname(entry.name)) && entry.name !== "package-lock.json") files.push(fullPath);
+    else if (extensions.has(extname(entry.name)) && entry.name !== "package-lock.json" && !isIgnoredLocalFile(fullPath)) files.push(fullPath);
   }
   return files;
 }
