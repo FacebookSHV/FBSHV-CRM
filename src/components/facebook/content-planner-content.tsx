@@ -13,6 +13,7 @@ import type {
   EditPostDraft,
   FacebookPage,
   PublishJobPreview,
+  PublishSettings,
   SchedulePostDraft,
   Suggestion
 } from "./content-planner-types";
@@ -51,24 +52,28 @@ export function ContentPlannerContent() {
   const [scheduleDraft, setScheduleDraft] = useState<SchedulePostDraft | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<ContentPost | null>(null);
   const [publishJobs, setPublishJobs] = useState<PublishJobPreview[]>([]);
+  const [publishSettings, setPublishSettings] = useState<PublishSettings>({ autoPublishEnabled: false });
   const [status, setStatus] = useState("Đang tải planner...");
 
-  async function loadPlanner() {
+  async function loadPlanner(nextStatus = "Planner sẵn sàng: draft, scheduled, upload R2 và publish job theo từng Page.") {
     const [postsResponse, calendarResponse, pagesResponse] = await Promise.all([
       fetch("/api/content/posts", { cache: "no-store" }),
       fetch("/api/content/calendar/suggestions?days=7", { cache: "no-store" }),
       fetch("/api/facebook/pages", { cache: "no-store" })
     ]);
-    const postsPayload = (await postsResponse.json()) as { success: boolean; data?: { posts: ContentPost[] } };
+    const postsPayload = (await postsResponse.json()) as { success: boolean; data?: { posts: ContentPost[]; publishSettings?: PublishSettings } };
     const calendarPayload = (await calendarResponse.json()) as { success: boolean; data?: { suggestions: Suggestion[] } };
     const pagesPayload = (await pagesResponse.json()) as { success: boolean; data?: { pages: FacebookPage[] } };
-    if (postsPayload.success && postsPayload.data) setPosts(postsPayload.data.posts);
+    if (postsPayload.success && postsPayload.data) {
+      setPosts(postsPayload.data.posts);
+      if (postsPayload.data.publishSettings) setPublishSettings(postsPayload.data.publishSettings);
+    }
     if (calendarPayload.success && calendarPayload.data) setSuggestions(calendarPayload.data.suggestions);
     if (pagesPayload.success && pagesPayload.data) {
       setPages(pagesPayload.data.pages);
       setSelectedPageIds((current) => (current.length ? current : defaultPageSelection(pagesPayload.data?.pages ?? [])));
     }
-    setStatus("Planner sẵn sàng: draft, scheduled, upload R2 và publish job theo từng Page.");
+    setStatus(nextStatus);
   }
 
   async function generateIdeas() {
@@ -129,6 +134,10 @@ export function ContentPlannerContent() {
       setStatus("Cần chọn sản phẩm thật đã sync trước khi lưu bài.");
       return;
     }
+    if (mode === "schedule" && !scheduledAt) {
+      setStatus("Cần chọn ngày giờ cụ thể trước khi lên lịch.");
+      return;
+    }
     if (!source.title.trim() || !source.caption.trim()) {
       setStatus("Cần nhập tiêu đề và caption trước khi lưu.");
       return;
@@ -148,11 +157,18 @@ export function ContentPlannerContent() {
       return;
     }
     if (!(await uploadMedia(payload.data.post.id))) return;
-    if (mode === "schedule") await schedulePost(payload.data.post, scheduledAt, pageIds);
-    if (mode === "publish") await publishPost(payload.data.post, pageIds);
+    if (mode === "schedule") {
+      await schedulePost(payload.data.post, scheduledAt, pageIds);
+      if (!idea) resetManualForm();
+      return;
+    }
+    if (mode === "publish") {
+      await publishPost(payload.data.post, pageIds);
+      if (!idea) resetManualForm();
+      return;
+    }
     if (!idea) resetManualForm();
-    setStatus(mode === "draft" ? "Đã lưu bài nháp." : mode === "schedule" ? "Đã lưu và tạo job scheduled." : "Đã tạo publish job theo từng Page.");
-    await loadPlanner();
+    await loadPlanner("Đã lưu bài nháp.");
   }
 
   async function schedulePost(post: ContentPost, localValue = scheduledAt, pageIds = selectedPageIds) {
@@ -167,13 +183,19 @@ export function ContentPlannerContent() {
       body: JSON.stringify({ scheduledAt: toIsoFromLocal(localValue), pageIds: targetPageIds })
     });
     const payload = (await response.json()) as { success: boolean; error?: string };
-    setStatus(payload.success ? "Đã lên lịch và tạo job riêng từng Fanpage." : payload.error || "Lên lịch lỗi.");
     setScheduleDraft(null);
-    await loadPlanner();
+    await loadPlanner(payload.success ? "Đã lên lịch và tạo job riêng từng Fanpage." : payload.error || "Lên lịch lỗi.");
   }
 
   async function publishPost(post: ContentPost, pageIds = selectedPageIds) {
     const targetPageIds = pageIds.length ? pageIds : [post.pageId];
+    if (publishSettings.autoPublishEnabled) {
+      const confirmed = window.confirm("AUTO_PUBLISH_POSTS_ENABLED=true: thao tác này sẽ đăng thật lên Facebook. Tiếp tục?");
+      if (!confirmed) {
+        setStatus("Đã huỷ publish thật trước khi gọi Facebook API.");
+        return;
+      }
+    }
     const response = await fetch(`/api/content/posts/${encodeURIComponent(post.id)}/publish`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -187,11 +209,10 @@ export function ContentPlannerContent() {
     if (payload.success && payload.data) {
       setPublishJobs(payload.data.jobs);
       const dryRun = payload.data.jobs.every((job) => job.dryRun);
-      setStatus(dryRun ? "Đã tạo publish job dry-run vì AUTO_PUBLISH_POSTS_ENABLED=false." : "Đã gửi publish job thật.");
+      await loadPlanner(dryRun ? "Đã tạo publish job dry-run vì AUTO_PUBLISH_POSTS_ENABLED=false." : "Đã gửi publish job thật.");
     } else {
-      setStatus(payload.error || "Tạo publish job lỗi.");
+      await loadPlanner(payload.error || "Tạo publish job lỗi.");
     }
-    await loadPlanner();
   }
 
   async function saveEdit() {
@@ -218,17 +239,15 @@ export function ContentPlannerContent() {
       })
     });
     const payload = (await response.json()) as { success: boolean; error?: string };
-    setStatus(payload.success ? "Đã lưu chỉnh sửa bài vào D1." : payload.error || "Lưu chỉnh sửa lỗi.");
     setEditing(null);
-    await loadPlanner();
+    await loadPlanner(payload.success ? "Đã lưu chỉnh sửa bài vào D1." : payload.error || "Lưu chỉnh sửa lỗi.");
   }
 
   async function deletePost(post: ContentPost) {
     const response = await fetch(`/api/content/posts/${encodeURIComponent(post.id)}`, { method: "DELETE" });
     const payload = (await response.json()) as { success: boolean; error?: string };
-    setStatus(payload.success ? "Đã xóa bài draft/scheduled khỏi D1." : payload.error || "Xóa bài lỗi.");
     setDeleteCandidate(null);
-    await loadPlanner();
+    await loadPlanner(payload.success ? "Đã xóa bài draft/scheduled khỏi D1." : payload.error || "Xóa bài lỗi.");
   }
 
   function updateMedia(file: File | null) {
@@ -278,7 +297,9 @@ export function ContentPlannerContent() {
 
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-soft">
         <StatusPill tone="info">Publish job theo Page</StatusPill>
-        <StatusPill tone="warning">Dry-run khi chưa bật publish thật</StatusPill>
+        <StatusPill tone={publishSettings.autoPublishEnabled ? "danger" : "warning"}>
+          {publishSettings.autoPublishEnabled ? "Publish thật đang bật" : "Dry-run khi chưa bật publish thật"}
+        </StatusPill>
         <span className="text-sm text-slate-600">{status}</span>
       </div>
 

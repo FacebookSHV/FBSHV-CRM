@@ -1,11 +1,15 @@
 import { failFromError, ok } from "@/lib/api-response";
-import { addContentPostTargets } from "@/lib/content-publishing";
+import { addContentPostTargets, isAutoPublishPostsEnabled } from "@/lib/content-publishing";
 import { createContentPost, listContentPosts } from "@/lib/content-planner";
 import type { ContentPost } from "@/lib/content-planner";
 
 export async function GET() {
   try {
-    return ok({ posts: await listContentPosts() });
+    return ok({
+      posts: await listContentPosts(),
+      // NEO: UI phải biết cờ publish thật để không hiển thị nhầm trạng thái dry-run.
+      publishSettings: { autoPublishEnabled: isAutoPublishPostsEnabled() }
+    });
   } catch (error) {
     return failFromError(error);
   }

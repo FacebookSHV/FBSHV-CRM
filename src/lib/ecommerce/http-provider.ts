@@ -15,6 +15,24 @@ type HttpProviderOptions = {
   apiKey: string;
 };
 
+type ExternalPricePayload = {
+  sku?: string;
+  price?: number;
+  currentPrice?: number;
+  salePrice?: number;
+  originalPrice?: number;
+  currency?: string;
+};
+
+function normalizePricePayload(sku: string, payload: ExternalPricePayload) {
+  const price = Number(payload.price ?? payload.currentPrice ?? payload.salePrice ?? payload.originalPrice ?? 0);
+  return {
+    sku: payload.sku || sku,
+    price: Number.isFinite(price) ? price : 0,
+    currency: payload.currency || "VND"
+  };
+}
+
 export class HttpEcommerceManagementProvider implements EcommerceManagementProvider {
   constructor(private readonly options: HttpProviderOptions) {}
 
@@ -55,10 +73,13 @@ export class HttpEcommerceManagementProvider implements EcommerceManagementProvi
     return this.request<ProductWithInventory>(`/api/external/products/sku/${encodeURIComponent(sku)}`);
   }
 
-  getSkuPrice(sku: string) {
-    return this.request<{ sku: string; price: number; currency: string }>(
+  async getSkuPrice(sku: string) {
+    const result = await this.request<ExternalPricePayload>(
       `/api/external/products/sku/${encodeURIComponent(sku)}/price`
     );
+    if (!result.success) return result;
+    // NEO: API TMĐT có thể trả currentPrice/salePrice; CRM normalize thành price để UI không hiển thị 0 giả.
+    return { success: true as const, data: normalizePricePayload(sku, result.data) };
   }
 
   async checkInventory(sku: string, quantity: number) {

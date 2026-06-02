@@ -33,6 +33,10 @@ type JobRow = {
 
 const memoryJobs = new Map<string, PublishJob>();
 
+export function isAutoPublishPostsEnabled(env: Record<string, string | undefined> = process.env) {
+  return env.AUTO_PUBLISH_POSTS_ENABLED === "true";
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -170,7 +174,7 @@ export async function createPublishJobs(input: {
       pageId,
       idempotencyKey,
       status: input.scheduledAt ? "scheduled" : "pending",
-      dryRun: process.env.AUTO_PUBLISH_POSTS_ENABLED !== "true",
+      dryRun: !isAutoPublishPostsEnabled(),
       scheduledAt: input.scheduledAt ?? null,
       createdAt: now,
       updatedAt: now

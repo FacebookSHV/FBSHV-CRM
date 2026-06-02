@@ -54,3 +54,7 @@ export type PublishJobPreview = {
   dryRun: boolean;
   error?: string | null;
 };
+
+export type PublishSettings = {
+  autoPublishEnabled: boolean;
+};

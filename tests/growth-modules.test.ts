@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { POST as createAdDraftRoute } from "@/app/api/ads/accounts/[accountId]/drafts/route";
+import { GET as listContentPostsRoute } from "@/app/api/content/posts/route";
 import { GET as listFacebookPages } from "@/app/api/facebook/pages/route";
 import {
   buildCalendarSuggestions,
@@ -8,7 +9,12 @@ import {
   scheduleContentPost
 } from "@/lib/content-planner";
 import { generateAiText } from "@/lib/ai/provider";
-import { createPublishJobs, listPublishJobs, resetContentPublishingMemoryForTests } from "@/lib/content-publishing";
+import {
+  createPublishJobs,
+  isAutoPublishPostsEnabled,
+  listPublishJobs,
+  resetContentPublishingMemoryForTests
+} from "@/lib/content-publishing";
 import { getAdsReadiness, publishAdDraft } from "@/lib/facebook/ads";
 import { getMemoryFacebookStoreForTests } from "@/lib/facebook/store";
 import { runPageAudit, resetPageAuditMemoryForTests } from "@/lib/page-audit";
@@ -17,6 +23,7 @@ describe("growth modules", () => {
   beforeEach(async () => {
     process.env.MOCK_ECOMMERCE_API = "true";
     process.env.MOCK_EXTERNAL_APIS = "true";
+    process.env.AUTO_PUBLISH_POSTS_ENABLED = "false";
     getMemoryFacebookStoreForTests().resetForTests();
     resetContentPlannerMemoryForTests();
     resetContentPublishingMemoryForTests();
@@ -75,7 +82,6 @@ describe("growth modules", () => {
   });
 
   it("publish nhiều Page tạo job riêng và chống trùng idempotency", async () => {
-    process.env.AUTO_PUBLISH_POSTS_ENABLED = "false";
     const post = await createContentPost({
       id: "post_publish_1",
       pageId: "page_test_growth",
@@ -97,6 +103,14 @@ describe("growth modules", () => {
     expect(second).toHaveLength(2);
     expect(await listPublishJobs(post.id)).toHaveLength(2);
     expect(first.every((job) => job.dryRun)).toBe(true);
+  });
+
+  it("Content Planner API trả đúng publish setting để UI cảnh báo publish thật", async () => {
+    process.env.AUTO_PUBLISH_POSTS_ENABLED = "true";
+    expect(isAutoPublishPostsEnabled()).toBe(true);
+    const response = await listContentPostsRoute();
+    const payload = await response.json() as { data: { publishSettings: { autoPublishEnabled: boolean } } };
+    expect(payload.data.publishSettings.autoPublishEnabled).toBe(true);
   });
 
   it("Ads read-only thiếu permission trả blocked, write bị chặn bởi cờ an toàn", async () => {
