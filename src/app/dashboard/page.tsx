@@ -18,10 +18,10 @@ export default async function DashboardPage() {
     <OverviewContent
       products={products}
       metrics={[
-        { label: "Fanpage thật", value: String(pages.length), helper: "Đọc từ bảng pages" },
-        { label: "Khách CRM", value: String(customers.customers.length), helper: "Tạo từ inbox/comment/order" },
-        { label: "Sản phẩm TMĐT", value: String(products.length), helper: "Đọc từ D1 product_cache đã sync" },
-        { label: "Nội dung", value: String(posts.length), helper: `${lowStock} SKU cần chú ý tồn` }
+        { label: "Fanpage", value: String(pages.length), helper: "Đã kết nối để chăm sóc và đăng bài" },
+        { label: "Khách hàng", value: String(customers.customers.length), helper: "Tổng hợp từ inbox, comment và đơn hàng" },
+        { label: "Sản phẩm", value: String(products.length), helper: "Đã đồng bộ từ Web Quản Lý TMĐT" },
+        { label: "Bài đăng", value: String(posts.length), helper: `${lowStock} SKU cần chú ý tồn kho` }
       ]}
     />
   );

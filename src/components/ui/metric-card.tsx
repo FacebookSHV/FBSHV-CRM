@@ -6,10 +6,10 @@ type MetricCardProps = {
 
 export function MetricCard({ label, value, helper }: MetricCardProps) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
-      <div className="text-sm font-medium text-slate-500">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-ink">{value}</div>
-      <div className="mt-1 text-xs text-slate-500">{helper}</div>
+    <section className="group rounded-lg border border-slate-200/80 bg-white/95 p-4 shadow-sm shadow-slate-200/60 transition duration-200 hover:-translate-y-0.5 hover:shadow-soft">
+      <div className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{label}</div>
+      <div className="mt-3 text-3xl font-extrabold tabular-nums text-slate-950">{value}</div>
+      <div className="mt-1 text-sm text-slate-500">{helper}</div>
     </section>
   );
 }

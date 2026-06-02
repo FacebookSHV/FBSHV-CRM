@@ -33,6 +33,25 @@ export const navItems = [
   { href: "/audit-logs", label: "Audit Log", icon: History }
 ] as const;
 
+export const navGroups = [
+  {
+    label: "Vận hành",
+    items: [navItems[0], navItems[2], navItems[4], navItems[5], navItems[6]]
+  },
+  {
+    label: "Dữ liệu",
+    items: [navItems[7], navItems[1], navItems[3]]
+  },
+  {
+    label: "Tăng trưởng",
+    items: [navItems[8], navItems[9], navItems[10], navItems[11]]
+  },
+  {
+    label: "Hệ thống",
+    items: [navItems[12], navItems[13]]
+  }
+] as const;
+
 export const mobileNavItems = [
   navItems[0],
   navItems[2],

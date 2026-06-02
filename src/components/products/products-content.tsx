@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { RefreshCw, Search, ShieldCheck, Tag } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
+import { PageHeader } from "@/components/pages/page-header";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { ProductSyncSummary, ProductWithInventory } from "@/lib/ecommerce/types";
 import { formatMoney } from "@/lib/money";
@@ -146,25 +147,25 @@ export function ProductsContent({ initialProducts, initialSyncSummary }: Product
 
   return (
     <div>
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Sản phẩm đồng bộ</h1>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            Cache sản phẩm từ Web Quản Lý TMĐT, chỉ kiểm tra giá/tồn qua API ngoài.
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Last synced: {formatDateTime(syncSummary.lastSyncedAt)} · synced_count: {syncSummary.syncedCount}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white focus-ring hover:bg-brand-700"
-          onClick={() => void syncProducts()}
-          disabled={loadingSku === "sync"}
-        >
-          <RefreshCw className={["h-4 w-4", loadingSku === "sync" ? "animate-spin" : ""].join(" ")} aria-hidden="true" />
-          Đồng bộ
-        </button>
+      <PageHeader
+        title="Sản phẩm đồng bộ"
+        subtitle="Cache sản phẩm từ Web Quản Lý TMĐT, chỉ kiểm tra giá và tồn qua API ngoài."
+        action={
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-bold text-white focus-ring hover:bg-brand-700"
+            onClick={() => void syncProducts()}
+            disabled={loadingSku === "sync"}
+          >
+            <RefreshCw className={["h-4 w-4", loadingSku === "sync" ? "animate-spin" : ""].join(" ")} aria-hidden="true" />
+            Đồng bộ
+          </button>
+        }
+      />
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <StatusPill tone="info">Lần sync gần nhất: {formatDateTime(syncSummary.lastSyncedAt)}</StatusPill>
+        <StatusPill tone="neutral">Số sản phẩm: {syncSummary.syncedCount}</StatusPill>
       </div>
       <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 shadow-soft sm:grid-cols-[1fr_auto] sm:items-center">
         <label className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 px-3">

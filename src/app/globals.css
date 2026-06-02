@@ -4,6 +4,7 @@
 
 :root {
   color-scheme: light;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
 }
 
 * {
@@ -16,8 +17,11 @@ html {
 
 body {
   min-height: 100vh;
-  background: #f4f7fb;
+  background: #f5f7fb;
   color: #172033;
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+  text-rendering: geometricPrecision;
 }
 
 button,
@@ -29,4 +33,14 @@ textarea {
 
 .focus-ring {
   @apply focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2;
+}
+
+@layer base {
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: rgba(27, 134, 209, 0.18);
+  }
 }

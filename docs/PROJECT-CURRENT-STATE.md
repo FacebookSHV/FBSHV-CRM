@@ -9,7 +9,7 @@ Last updated: 2026-06-02
 - Worker: `fbshv-crm`.
 - D1: `fbshv_crm_db`.
 - R2: `fbshv-crm-assets`.
-- Latest deploy verified in this run: `738f5529-bb20-49cc-8b76-a660ba132363`.
+- Latest deploy verified in this run: `126be1b6-2178-4b08-9457-c8dbb20dbf8c`.
 
 ## Current Verified Capabilities
 
@@ -25,6 +25,10 @@ Last updated: 2026-06-02
 - Inbox now uses a real product picker from the CRM product cache when creating ecommerce orders from a Facebook conversation.
 - Settings shows real runtime status for Meta, Ecommerce, Cloudflare, Ads, Webhook, AI, Meta SDK status, Pixel + CAPI status, and social UX integration.
 - Facebook automation live-write is enabled for Messenger auto reply, comment auto reply, and phone-number comment hiding.
+- UI shell now separates mobile from tablet/PC:
+  - Mobile uses compact page headers, bottom navigation, and mobile-only dashboard work actions.
+  - Tablet/PC uses the fixed left operator sidebar, grouped navigation, wider workspace headers, and desktop dashboard panels.
+  - Shared cards, metric cards, badges, empty states, and app background were refreshed for a more professional operator console.
 
 ## New Integrations Added
 
@@ -58,6 +62,8 @@ Last updated: 2026-06-02
 
 - Chrome visible profile used: `E:\codex-chrome-profiles\fbshv-meta`.
 - Production routes verified this run:
+  - `/dashboard`
+  - `/products`
   - `/ads`
   - `/ads/accounts/act_507856080770596`
   - `/ads/accounts/act_750430830961447`
@@ -67,10 +73,11 @@ Last updated: 2026-06-02
   - `/settings`
   - `POST /api/meta/capi/events`
 - Responsive checks this run:
+  - `/dashboard`: mobile, tablet, desktop, no horizontal overflow; mobile and tablet/PC render different workspace layouts.
+  - `/products`: mobile, tablet, desktop, no horizontal overflow; page header now uses separated mobile/tablet-PC layout.
   - `/content-planner`: mobile, tablet, desktop, no horizontal overflow.
-  - `/inbox`: mobile, tablet, desktop, no horizontal overflow.
-  - `/settings`: mobile and desktop, no horizontal overflow.
-  - `/ads/accounts/act_750430830961447`: desktop, no horizontal overflow across clicked tabs.
+  - `/settings`: mobile, tablet, desktop, no horizontal overflow after fixing tablet card columns.
+  - `/ads`: mobile, tablet, desktop, no horizontal overflow.
 
 ## Do Not Commit
 

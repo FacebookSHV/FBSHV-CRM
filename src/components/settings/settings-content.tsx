@@ -153,7 +153,7 @@ export function SettingsContent() {
 
       {status ? (
         <>
-          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <section className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
             <StatusCard
               title="Facebook/Meta"
               icon={<PlugZap />}
