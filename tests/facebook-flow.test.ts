@@ -3,7 +3,7 @@ import { GET as verifyFacebookWebhook, POST as receiveFacebookWebhook } from "@/
 import { MockFacebookClient } from "@/lib/facebook/client";
 import { detectVietnamesePhone, resetFacebookAutomationMemoryForTests } from "@/lib/facebook/automation";
 import { getFacebookRuntimeConfig } from "@/lib/facebook/env";
-import { FACEBOOK_OAUTH_SCOPES } from "@/lib/facebook/oauth";
+import { FACEBOOK_ADS_OAUTH_SCOPES, FACEBOOK_OAUTH_SCOPES } from "@/lib/facebook/oauth";
 import { withMetaPermission } from "@/lib/facebook/permissions";
 import { getMemoryFacebookStoreForTests } from "@/lib/facebook/store";
 import { parseFacebookWebhookPayload } from "@/lib/facebook/webhook";
@@ -81,9 +81,9 @@ describe("facebook real-flow helpers", () => {
   });
 
   it("verify GET webhook bằng verify token", async () => {
-    process.env.META_VERIFY_TOKEN = "verify_test";
+    process.env.META_VERIFY_TOKEN = "verify";
     const request = new Request(
-      "http://localhost/api/webhooks/facebook?hub.mode=subscribe&hub.verify_token=verify_test&hub.challenge=abc123"
+      "http://localhost/api/webhooks/facebook?hub.mode=subscribe&hub.verify_token=verify&hub.challenge=abc123"
     );
     const response = await verifyFacebookWebhook(request);
     await expect(response.text()).resolves.toBe("abc123");
@@ -101,6 +101,12 @@ describe("facebook real-flow helpers", () => {
     expect(FACEBOOK_OAUTH_SCOPES).not.toContain("business_management");
     expect(FACEBOOK_OAUTH_SCOPES).not.toContain("ads_read");
     expect(FACEBOOK_OAUTH_SCOPES).not.toContain("ads_management");
+  });
+
+  it("OAuth intent Ads xin them ads_management cho live-write rieng", () => {
+    expect(FACEBOOK_ADS_OAUTH_SCOPES).toContain("business_management");
+    expect(FACEBOOK_ADS_OAUTH_SCOPES).toContain("ads_read");
+    expect(FACEBOOK_ADS_OAUTH_SCOPES).toContain("ads_management");
   });
 
   it("phát hiện số điện thoại Việt Nam trong bình luận", () => {

@@ -170,3 +170,69 @@ File đã sửa:
   - backup SQL/zip/token/secret files.
 - Không dùng Cloudflare account cũ `efe50fab1dd644088d681fb14a4838ae`.
 - Không bấm confirm publish thật trên production nếu không chủ động muốn đăng bài Facebook thật.
+
+## Cập nhật Ads live-write production - 2026-06-02
+
+### Code và deploy
+
+- Đã thêm OAuth Ads scope `ads_management` cho intent Ads và đã reconnect Facebook bằng Chrome visible profile `E:\codex-chrome-profiles\fbshv-meta`.
+- D1 connection mới có đủ scope:
+  - `pages_show_list`
+  - `pages_manage_metadata`
+  - `pages_read_engagement`
+  - `pages_messaging`
+  - `pages_manage_engagement`
+  - `pages_manage_posts`
+  - `business_management`
+  - `ads_read`
+  - `ads_management`
+- Đã bật secret runtime `AD_WRITE_ACTIONS_ENABLED=true` trên Worker `fbshv-crm` sau khi hard gate Cloudflare đúng account `3d1e8c3bd1f4f9ace7388e60dd11fbed`.
+- Deploy bản Ads live-write mới nhất: `5a32c4c9-5e50-47ef-97c3-d234859c216a`.
+
+### Ads production verification
+
+- Đã mở `/ads` trên production bằng Chrome visible profile thật.
+- `/ads` hiển thị đúng `Write đang bật`, copy nêu rõ ghi thật cần xác nhận riêng và object mới tạo ở trạng thái tạm dừng.
+- `/ads` vẫn hiển thị 3 ad account thật:
+  - `act_507856080770596`
+  - `act_750430830961447`
+  - `act_759411594070976`
+- Đã mở detail từng account bằng route `/ads/accounts/:accountId`; các tab `Campaigns`, `Ad Sets`, `Ads`, `Insights`, `Create Ad / Draft` đều click được.
+
+### Live-write thật đã chạy
+
+- Account live-write sample: `act_750430830961447`.
+- Nút `Tạo thật tạm dừng` đã mở confirm trước khi gọi Meta Marketing API.
+- Sau khi Meta trả lỗi bắt buộc `is_adset_budget_sharing_enabled`, code đã thêm tham số này và deploy lại.
+- Live-write thành công, không phải dry-run:
+  - `ad_actions_log.id`: `4e345426-0cac-4751-9dee-1e391694cda4`
+  - `action_type`: `ads_live_create_paused`
+  - `dry_run`: `0`
+  - `status`: `success`
+  - Campaign: `120248500979870206` - `PAUSED`
+  - Ad set: `120248500980650206` - `PAUSED`
+  - Ad: `120248500983870206` - `PAUSED`
+  - Creative: `2804748379908272`
+- Production UI sau deploy hiển thị lại:
+  - Campaign row `120248500979870206 | Boost post draft | PAUSED | OUTCOME_TRAFFIC`.
+  - Ad set row `120248500980650206 | Boost post draft - Nhóm quảng cáo | PAUSED | LINK_CLICKS | budget 100000`.
+  - Ad row `120248500983870206 | Boost post draft - Quảng cáo | PAUSED`.
+
+### Draft nội bộ và product picker
+
+- Product picker trong form Ads đã lấy sản phẩm thật từ D1:
+  - SKU `1_BO_CS_300W_K268`
+  - Giá `158.000 ₫`
+  - Tồn `136`
+- Đã click chọn sản phẩm, UI đổi sang `Sản phẩm: 1_BO_CS_300W_K268`.
+- Đã tạo draft nội bộ an toàn qua UI production:
+  - Draft id `104de4bf-8e95-4b3e-962d-0a2d29c3a25e`
+  - `ad_account_id`: `act_750430830961447`
+  - `status`: `draft`
+  - `productSku`: `1_BO_CS_300W_K268`
+
+### Trạng thái còn lưu ý
+
+- Insights trả 0 dòng ở một số account/range; đây là kết quả API thực, không render mock.
+- Ad live-write mới đang `PAUSED`, `effective_status` có thể chờ Meta review khi kiểm sâu trong Ads Manager. Không tự bật ACTIVE nếu user chưa xác nhận rõ.
+- Không tạo thêm live-write trùng sau deploy cuối; chỉ xác nhận object PAUSED đã tồn tại và tạo thêm draft nội bộ.

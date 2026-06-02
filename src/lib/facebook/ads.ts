@@ -1,7 +1,9 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getD1Database } from "@/lib/db";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
 import { blockedMetaPermission } from "./permissions";
 import { getFacebookRuntimeConfigAsync } from "./env";
+import { getFacebookStore } from "./store";
 import { decryptToken } from "./token-crypto";
 
 export type AdsReadiness = {
@@ -32,6 +34,41 @@ type CampaignRow = {
   status: string;
 };
 
+type AdDraftRow = {
+  id: string;
+  workspace_id: string;
+  source_post_id: string | null;
+  ad_account_id: string | null;
+  name: string;
+  budget_daily: number;
+  status: string;
+  config_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type AdDraftConfig = {
+  pageId?: string;
+  sourcePostId?: string;
+  adAccountId?: string;
+  name?: string;
+  budgetDaily?: number;
+  objective?: "OUTCOME_ENGAGEMENT" | "OUTCOME_TRAFFIC" | "OUTCOME_SALES";
+  schedule?: string;
+  audience?: string;
+  creativeText?: string;
+  productSku?: string;
+  destinationUrl?: string;
+};
+
+type MetaObjectResponse = {
+  id?: string;
+  name?: string;
+  status?: string;
+  effective_status?: string;
+  objective?: string;
+};
+
 const readPermissions = ["ads_read", "business_management"];
 
 function nowIso() {
@@ -49,6 +86,18 @@ async function currentScopes() {
     .flatMap((row) => row.scopes.split(","))
     .map((scope) => scope.trim())
     .filter(Boolean);
+}
+
+export async function isAdsWriteActionsEnabled() {
+  let value = process.env.AD_WRITE_ACTIONS_ENABLED;
+  try {
+    const context = await getCloudflareContext({ async: true });
+    const bindingValue = (context.env as Record<string, unknown>).AD_WRITE_ACTIONS_ENABLED;
+    if (typeof bindingValue === "string") value = bindingValue;
+  } catch {
+    // NEO: Local/test không có Cloudflare context thì dùng process.env.
+  }
+  return typeof value === "string" && value.trim() === "true";
 }
 
 async function latestConnection() {
@@ -93,6 +142,68 @@ async function metaAdsRequest<T>(path: string, params: Record<string, string | u
   return payload;
 }
 
+function normalizeMetaParam(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
+}
+
+function sanitizeMetaError(message: string) {
+  return message.replace(/[A-Za-z0-9_-]{40,}/g, (value) => `${value.slice(0, 6)}...${value.slice(-4)}`);
+}
+
+async function metaAdsPostRequest<T>(path: string, params: Record<string, unknown> = {}) {
+  const auth = await getAdsAccessToken();
+  const body = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    const normalized = normalizeMetaParam(value);
+    if (normalized !== undefined) body.set(key, normalized);
+  }
+  body.set("access_token", auth.token);
+
+  const response = await fetch(`https://graph.facebook.com/${auth.graphApiVersion}${path}`, {
+    method: "POST",
+    body
+  });
+  const payload = (await response.json().catch(() => ({}))) as T & {
+    error?: {
+      message?: string;
+      code?: number;
+      type?: string;
+      error_subcode?: number;
+      error_user_title?: string;
+      error_user_msg?: string;
+      error_data?: unknown;
+    };
+  };
+  if (!response.ok || payload.error) {
+    const error = payload.error;
+    const details = [error?.type, error?.code ? `code=${error.code}` : "", error?.error_subcode ? `subcode=${error.error_subcode}` : ""]
+      .filter(Boolean)
+      .join(", ");
+    const userDetails = [
+      error?.error_user_title,
+      error?.error_user_msg,
+      error?.error_data ? sanitizeMetaError(JSON.stringify(error.error_data)) : ""
+    ].filter(Boolean).join(" | ");
+    const message = sanitizeMetaError(error?.message || "Meta Marketing API trả lỗi");
+    throw new Error(`META_ADS_API_ERROR: ${message}${details ? ` (${details})` : ""}${userDetails ? `: ${userDetails}` : ""}`);
+  }
+  return payload;
+}
+
+async function metaAdsStep<T>(step: string, action: () => Promise<T>) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("META_ADS_API_ERROR")) {
+      throw new Error(`${error.message}; step=${step}`);
+    }
+    throw error;
+  }
+}
+
 function missing(scopes: string[], required: string[]) {
   return required.filter((permission) => !scopes.includes(permission));
 }
@@ -105,7 +216,7 @@ export async function getAdsReadiness(options: { strict?: boolean } = {}): Promi
     return {
       status: "blocked",
       missingPermissions,
-      writeActionsEnabled: process.env.AD_WRITE_ACTIONS_ENABLED === "true",
+      writeActionsEnabled: await isAdsWriteActionsEnabled(),
       accounts: []
     };
   }
@@ -115,7 +226,7 @@ export async function getAdsReadiness(options: { strict?: boolean } = {}): Promi
     return {
       status: "empty",
       missingPermissions: [],
-      writeActionsEnabled: process.env.AD_WRITE_ACTIONS_ENABLED === "true",
+      writeActionsEnabled: await isAdsWriteActionsEnabled(),
       accounts: []
     };
   }
@@ -137,7 +248,7 @@ export async function getAdsReadiness(options: { strict?: boolean } = {}): Promi
   return {
     status: accounts.length ? "ready" : "empty",
     missingPermissions: [],
-    writeActionsEnabled: process.env.AD_WRITE_ACTIONS_ENABLED === "true",
+    writeActionsEnabled: await isAdsWriteActionsEnabled(),
     accounts
   };
 }
@@ -210,7 +321,7 @@ export async function getAdAccountDetail(accountId: string) {
     currency: detail.currency ?? null,
     timezoneName: detail.timezone_name ?? null,
     timezoneId: detail.timezone_id ?? null,
-    writeActionsEnabled: process.env.AD_WRITE_ACTIONS_ENABLED === "true"
+    writeActionsEnabled: await isAdsWriteActionsEnabled()
   };
 }
 
@@ -328,7 +439,7 @@ export async function listAdInsights() {
 }
 
 async function requireAdsWrite() {
-  if (process.env.AD_WRITE_ACTIONS_ENABLED !== "true") {
+  if (!(await isAdsWriteActionsEnabled())) {
     throw new Error("AD_WRITE_ACTIONS_DISABLED");
   }
   const scopes = await currentScopes();
@@ -336,7 +447,145 @@ async function requireAdsWrite() {
   if (missingWrite.length > 0) throw blockedMetaPermission(missingWrite.join(","));
 }
 
+async function readAdDraft(id: string) {
+  const db = await getD1Database();
+  if (!db) throw new Error("BLOCKED_BY_MISSING_BINDING: DB");
+  const row = await db
+    .prepare("select * from ad_drafts where id = ? and workspace_id = ?")
+    .bind(id, DEFAULT_WORKSPACE_ID)
+    .first<AdDraftRow>();
+  if (!row) throw new Error(`ADS_DRAFT_NOT_FOUND: ${id}`);
+  return row;
+}
+
+function parseDraftConfig(row: AdDraftRow): AdDraftConfig {
+  try {
+    return JSON.parse(row.config_json || "{}") as AdDraftConfig;
+  } catch {
+    return {};
+  }
+}
+
+function ensureDestinationUrl(value?: string) {
+  if (!value) throw new Error("ADS_DESTINATION_URL_REQUIRED: Cần nhập link đích trước khi ghi quảng cáo thật.");
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) throw new Error("invalid");
+    return url.toString();
+  } catch {
+    throw new Error("ADS_DESTINATION_URL_REQUIRED: Link đích phải là URL http/https hợp lệ.");
+  }
+}
+
+function normalizeObjective(value?: string) {
+  if (value === "OUTCOME_ENGAGEMENT" || value === "OUTCOME_SALES") return value;
+  return "OUTCOME_TRAFFIC";
+}
+
+function optimizationGoalFor(objective: string) {
+  if (objective === "OUTCOME_ENGAGEMENT") return "POST_ENGAGEMENT";
+  if (objective === "OUTCOME_SALES") {
+    throw new Error("ADS_PIXEL_REQUIRED_FOR_SALES_OBJECTIVE: Mục tiêu Sales cần Pixel/CAPI và promoted_object trước khi ghi thật.");
+  }
+  return "LINK_CLICKS";
+}
+
+function normalizeBudget(value: number) {
+  const budget = Math.trunc(Number(value || 0));
+  if (!Number.isFinite(budget) || budget <= 0) {
+    throw new Error("ADS_BUDGET_REQUIRED: Ngân sách ngày phải lớn hơn 0 trước khi ghi quảng cáo thật.");
+  }
+  return budget;
+}
+
+function normalizeStartTime(value?: string) {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+async function resolveAdPage(pageId?: string) {
+  if (!pageId) throw new Error("ADS_PAGE_REQUIRED: Cần chọn Fanpage trước khi ghi quảng cáo thật.");
+  const store = await getFacebookStore();
+  const page = (await store.getPage(pageId)) || (await store.findPageByExternalId(pageId));
+  if (!page || page.status === "mock") throw new Error("ADS_PAGE_REQUIRED: Fanpage không tồn tại hoặc không phải dữ liệu thật.");
+  return page;
+}
+
+async function logAdAction(input: {
+  actionType: string;
+  targetId?: string | null;
+  dryRun: boolean;
+  status: "success" | "failed" | "blocked";
+  error?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  const db = await getD1Database();
+  if (!db) return;
+  await db
+    .prepare(
+      `insert into ad_actions_log (id, workspace_id, action_type, target_id, dry_run, status, error, metadata_json, created_at)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      crypto.randomUUID(),
+      DEFAULT_WORKSPACE_ID,
+      input.actionType,
+      input.targetId ?? null,
+      input.dryRun ? 1 : 0,
+      input.status,
+      input.error ?? null,
+      JSON.stringify(input.metadata ?? {}),
+      nowIso()
+    )
+    .run();
+}
+
+async function cacheLiveAdObjects(input: {
+  accountId: string;
+  campaign: MetaObjectResponse;
+  adset: MetaObjectResponse;
+  ad: MetaObjectResponse;
+  creativeId: string;
+  name: string;
+  budgetDaily: number;
+}) {
+  const db = await getD1Database();
+  if (!db) return;
+  await db.batch([
+    db
+      .prepare(
+        `insert into campaigns (id, ad_account_id, external_campaign_id, name, status)
+         values (?, ?, ?, ?, ?)
+         on conflict(id) do update set name = excluded.name, status = excluded.status`
+      )
+      .bind(input.campaign.id!, input.accountId, input.campaign.id!, input.campaign.name || input.name, input.campaign.status || input.campaign.effective_status || "PAUSED"),
+    db
+      .prepare(
+        `insert into ad_sets (id, campaign_id, external_ad_set_id, name, budget, status)
+         values (?, ?, ?, ?, ?, ?)
+         on conflict(id) do update set name = excluded.name, budget = excluded.budget, status = excluded.status`
+      )
+      .bind(input.adset.id!, input.campaign.id!, input.adset.id!, input.adset.name || `${input.name} - Nhóm`, input.budgetDaily, input.adset.status || input.adset.effective_status || "PAUSED"),
+    db
+      .prepare(
+        `insert into ads (id, ad_set_id, external_ad_id, name, creative_json, status)
+         values (?, ?, ?, ?, ?, ?)
+         on conflict(id) do update set name = excluded.name, creative_json = excluded.creative_json, status = excluded.status`
+      )
+      .bind(
+        input.ad.id!,
+        input.adset.id!,
+        input.ad.id!,
+        input.ad.name || `${input.name} - Ad`,
+        JSON.stringify({ creativeId: input.creativeId }),
+        input.ad.status || input.ad.effective_status || "PAUSED"
+      )
+  ]);
+}
+
 export async function createAdDraft(input: {
+  pageId?: string;
   sourcePostId?: string;
   adAccountId?: string;
   name?: string;
@@ -346,6 +595,7 @@ export async function createAdDraft(input: {
   audience?: string;
   creativeText?: string;
   productSku?: string;
+  destinationUrl?: string;
 }) {
   const db = await getD1Database();
   const now = nowIso();
@@ -385,14 +635,154 @@ export async function createAdDraft(input: {
 }
 
 export async function publishAdDraft(id: string) {
-  void id;
   await requireAdsWrite();
-  return { status: "ready_for_meta_write" as const };
+  const row = await readAdDraft(id);
+  const config = parseDraftConfig(row);
+  const accountId = row.ad_account_id || config.adAccountId;
+  if (!accountId) throw new Error("ADS_ACCOUNT_REQUIRED: Thiếu ad account cho draft quảng cáo.");
+  const page = await resolveAdPage(config.pageId);
+  const destinationUrl = ensureDestinationUrl(config.destinationUrl);
+  const objective = normalizeObjective(config.objective);
+  const optimizationGoal = optimizationGoalFor(objective);
+  const budgetDaily = normalizeBudget(row.budget_daily || Number(config.budgetDaily));
+  const name = row.name || config.name || "FBSHV CRM live ad";
+  const creativeText = (config.creativeText || name).trim();
+  const startTime = normalizeStartTime(config.schedule);
+  const targeting = {
+    geo_locations: { countries: ["VN"] },
+    age_min: 18,
+    age_max: 65
+  };
+
+  try {
+    // NEO: Live write Ads tạo object Meta thật ở trạng thái PAUSED để readback mà không tự chạy tiền.
+    const campaign = await metaAdsStep("campaign", () =>
+      metaAdsPostRequest<MetaObjectResponse>(`/${encodeURIComponent(accountId)}/campaigns`, {
+        name,
+        objective,
+        status: "PAUSED",
+        is_adset_budget_sharing_enabled: false,
+        special_ad_categories: []
+      })
+    );
+    const adset = await metaAdsStep("adset", () =>
+      metaAdsPostRequest<MetaObjectResponse>(`/${encodeURIComponent(accountId)}/adsets`, {
+        name: `${name} - Nhóm quảng cáo`,
+        campaign_id: campaign.id,
+        daily_budget: budgetDaily,
+        billing_event: "IMPRESSIONS",
+        optimization_goal: optimizationGoal,
+        bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+        targeting,
+        start_time: startTime,
+        status: "PAUSED"
+      })
+    );
+    const creative = await metaAdsStep("creative", () =>
+      metaAdsPostRequest<{ id?: string }>(`/${encodeURIComponent(accountId)}/adcreatives`, {
+        name: `${name} - Nội dung`,
+        object_story_spec: {
+          page_id: page.externalPageId,
+          link_data: {
+            link: destinationUrl,
+            message: creativeText,
+            call_to_action: {
+              type: "LEARN_MORE",
+              value: { link: destinationUrl }
+            }
+          }
+        }
+      })
+    );
+    if (!creative.id) throw new Error("META_ADS_API_ERROR: Meta không trả creative id.");
+    const ad = await metaAdsStep("ad", () =>
+      metaAdsPostRequest<MetaObjectResponse>(`/${encodeURIComponent(accountId)}/ads`, {
+        name: `${name} - Quảng cáo`,
+        adset_id: adset.id,
+        creative: { creative_id: creative.id },
+        status: "PAUSED"
+      })
+    );
+    if (!campaign.id || !adset.id || !ad.id) throw new Error("META_ADS_API_ERROR: Meta không trả đủ campaign/adset/ad id.");
+
+    const [campaignReadback, adsetReadback, adReadback] = await Promise.all([
+      metaAdsRequest<MetaObjectResponse>(`/${encodeURIComponent(campaign.id)}`, { fields: "id,name,status,effective_status,objective" }),
+      metaAdsRequest<MetaObjectResponse>(`/${encodeURIComponent(adset.id)}`, { fields: "id,name,status,effective_status" }),
+      metaAdsRequest<MetaObjectResponse>(`/${encodeURIComponent(ad.id)}`, { fields: "id,name,status,effective_status" })
+    ]);
+
+    await cacheLiveAdObjects({
+      accountId,
+      campaign: campaignReadback,
+      adset: adsetReadback,
+      ad: adReadback,
+      creativeId: creative.id,
+      name,
+      budgetDaily
+    });
+
+    const db = await getD1Database();
+    await db
+      ?.prepare("update ad_drafts set status = ?, updated_at = ? where id = ? and workspace_id = ?")
+      .bind("live_paused", nowIso(), id, DEFAULT_WORKSPACE_ID)
+      .run();
+    await logAdAction({
+      actionType: "ads_live_create_paused",
+      targetId: adReadback.id || ad.id,
+      dryRun: false,
+      status: "success",
+      metadata: {
+        draftId: id,
+        adAccountId: accountId,
+        pageId: page.externalPageId,
+        campaignId: campaignReadback.id,
+        adsetId: adsetReadback.id,
+        adId: adReadback.id,
+        creativeId: creative.id,
+        status: "PAUSED"
+      }
+    });
+    return {
+      status: "live_paused" as const,
+      draftId: id,
+      adAccountId: accountId,
+      campaign: campaignReadback,
+      adset: adsetReadback,
+      ad: adReadback,
+      creativeId: creative.id
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "META_ADS_API_ERROR: Không ghi được quảng cáo thật.";
+    const db = await getD1Database();
+    await db
+      ?.prepare("update ad_drafts set status = ?, updated_at = ? where id = ? and workspace_id = ?")
+      .bind("failed", nowIso(), id, DEFAULT_WORKSPACE_ID)
+      .run();
+    await logAdAction({
+      actionType: "ads_live_create_paused",
+      targetId: id,
+      dryRun: false,
+      status: "failed",
+      error: message,
+      metadata: { draftId: id, adAccountId: accountId }
+    });
+    throw error;
+  }
 }
 
 export async function changeCampaignState(campaignId: string, nextState: "paused" | "active") {
-  void campaignId;
-  void nextState;
   await requireAdsWrite();
-  return { status: "ready_for_meta_write" as const };
+  const status = nextState === "active" ? "ACTIVE" : "PAUSED";
+  await metaAdsPostRequest(`/${encodeURIComponent(campaignId)}`, { status });
+  const campaign = await metaAdsRequest<MetaObjectResponse>(`/${encodeURIComponent(campaignId)}`, {
+    fields: "id,name,status,effective_status"
+  });
+  await logAdAction({
+    actionType: nextState === "active" ? "ads_campaign_activate" : "ads_campaign_pause",
+    targetId: campaignId,
+    dryRun: false,
+    status: "success",
+    metadata: { campaignId, status: campaign.status || campaign.effective_status }
+  });
+  return { status: campaign.status || status, campaign };
 }

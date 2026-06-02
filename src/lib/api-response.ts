@@ -21,11 +21,19 @@ export function failFromError(error: unknown, fallback = "Lỗi hệ thống") {
       ? "BLOCKED_META_PERMISSION_MISSING"
       : message.startsWith("AD_WRITE_ACTIONS_DISABLED")
         ? "AD_WRITE_ACTIONS_DISABLED"
+      : message.startsWith("ADS_")
+        ? message.split(":")[0] || "ADS_ERROR"
+      : message.startsWith("META_ADS_API_ERROR")
+        ? "META_ADS_API_ERROR"
       : message.startsWith("AUTO_PUBLISH_POSTS_DISABLED")
         ? "AUTO_PUBLISH_POSTS_DISABLED"
       : message.startsWith("BLOCKED_BY_MISSING_SECRET")
       ? "BLOCKED_BY_MISSING_SECRET"
       : "INTERNAL_ERROR";
-  const status = code.startsWith("BLOCKED") || code.endsWith("DISABLED") ? 400 : 500;
+  const status = code.startsWith("BLOCKED") || code.endsWith("DISABLED") || code.startsWith("ADS_")
+    ? 400
+    : code === "META_ADS_API_ERROR"
+      ? 502
+      : 500;
   return fail(message, status, code);
 }

@@ -12,7 +12,8 @@ export const FACEBOOK_OAUTH_SCOPES = [
 export const FACEBOOK_ADS_OAUTH_SCOPES = [
   ...FACEBOOK_OAUTH_SCOPES,
   "business_management",
-  "ads_read"
+  "ads_read",
+  "ads_management"
 ];
 
 export function buildFacebookOAuthUrl(config: FacebookRuntimeConfig, state: string, scopes = FACEBOOK_OAUTH_SCOPES) {

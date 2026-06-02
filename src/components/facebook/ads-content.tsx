@@ -20,7 +20,11 @@ const requiredWrite = ["ads_management"];
 
 export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadiness }) {
   const [readiness, setReadiness] = useState(initialReadiness);
-  const [status, setStatus] = useState("Ads chỉ đọc account thật từ Meta, không hiển thị ad account giả.");
+  const [status, setStatus] = useState(
+    initialReadiness.writeActionsEnabled
+      ? "Ads write đang bật: thao tác ghi thật cần xác nhận riêng và tạo object ở trạng thái tạm dừng."
+      : "Ads chỉ đọc account thật từ Meta, không hiển thị ad account giả."
+  );
   const [refreshing, setRefreshing] = useState(false);
 
   async function refreshAccounts() {
@@ -43,7 +47,9 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
     <div>
       <PageHeader
         title="Facebook Ads"
-        subtitle="Kết nối và quản lý ad account thật ở chế độ read-only; mọi Ads write bị chặn nếu chưa bật cờ an toàn."
+        subtitle={readiness.writeActionsEnabled
+          ? "Kết nối, đọc dữ liệu Meta Ads thật và cho phép ghi thật sau bước xác nhận; object mới được tạo ở trạng thái tạm dừng."
+          : "Kết nối và quản lý ad account thật ở chế độ read-only; Ads write bị chặn nếu chưa bật cờ an toàn."}
         action={
           <div className="flex gap-2">
             <a
@@ -78,7 +84,7 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
             </p>
           </div>
           <StatusPill tone={readiness.writeActionsEnabled ? "warning" : "success"}>
-            {readiness.writeActionsEnabled ? "Write cần ads_management" : "Ads write đang chặn"}
+            {readiness.writeActionsEnabled ? "Write đang bật" : "Ads write đang chặn"}
           </StatusPill>
         </div>
       </section>
@@ -111,7 +117,9 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
             <h3 className="mt-3 text-sm font-semibold text-ink">{scope}</h3>
             <p className="mt-2 text-sm text-slate-600">
               {scope === "ads_management"
-                ? "Chỉ dùng cho thao tác ghi Ads, hiện bị chặn bởi AD_WRITE_ACTIONS_ENABLED nếu chưa bật."
+                ? readiness.writeActionsEnabled
+                  ? "Dùng cho thao tác ghi Ads thật; mỗi lần ghi vẫn cần xác nhận và tạo ở trạng thái tạm dừng."
+                  : "Chỉ dùng cho thao tác ghi Ads, hiện bị chặn bởi AD_WRITE_ACTIONS_ENABLED nếu chưa bật."
                 : "Cần cho Connect Ads Account và đọc danh sách ad account thật."}
             </p>
           </article>

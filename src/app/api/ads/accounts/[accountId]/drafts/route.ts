@@ -2,7 +2,13 @@ import { z } from "zod";
 import { fail, failFromError, ok } from "@/lib/api-response";
 import { createAdDraft } from "@/lib/facebook/ads";
 
+const optionalUrl = z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().url().max(500).optional()
+);
+
 const createDraftSchema = z.object({
+  pageId: z.string().trim().max(200).optional(),
   sourcePostId: z.string().trim().max(200).optional(),
   name: z.string().trim().min(1).max(160).optional(),
   budgetDaily: z.coerce.number().int().min(0).max(1_000_000_000).optional(),
@@ -10,7 +16,8 @@ const createDraftSchema = z.object({
   schedule: z.string().trim().max(64).optional(),
   audience: z.string().trim().max(1_000).optional(),
   creativeText: z.string().trim().max(5_000).optional(),
-  productSku: z.string().trim().max(200).optional()
+  productSku: z.string().trim().max(200).optional(),
+  destinationUrl: optionalUrl
 });
 
 export async function POST(

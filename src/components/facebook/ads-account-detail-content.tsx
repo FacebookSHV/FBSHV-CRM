@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, RefreshCcw, Save } from "lucide-react";
+import { ArrowLeft, RefreshCcw, Save, Send } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ProductSearchPicker } from "@/components/products/product-search-picker";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -20,6 +20,7 @@ type AccountDetail = {
 };
 
 type DraftForm = {
+  pageId: string;
   name: string;
   budgetDaily: string;
   objective: string;
@@ -27,6 +28,14 @@ type DraftForm = {
   audience: string;
   creativeText: string;
   productSku: string;
+  destinationUrl: string;
+};
+
+type FacebookPage = {
+  id: string;
+  externalPageId: string;
+  name: string;
+  status: string;
 };
 
 const tabs = ["Overview", "Campaigns", "Ad Sets", "Ads", "Insights", "Create Ad / Draft"] as const;
@@ -81,21 +90,25 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Overview");
   const [account, setAccount] = useState<AccountDetail | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [pages, setPages] = useState<FacebookPage[]>([]);
   const [status, setStatus] = useState("Đang tải ad account thật từ Meta.");
   const [refreshing, setRefreshing] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [writingLive, setWritingLive] = useState(false);
   const [datePreset, setDatePreset] = useState("last_7d");
   const [level, setLevel] = useState("account");
   const [selectedProduct, setSelectedProduct] = useState<ProductWithInventory | null>(null);
   const tabRequestId = useRef(0);
   const [draft, setDraft] = useState<DraftForm>({
+    pageId: "",
     name: "Boost post draft",
     budgetDaily: "100000",
-    objective: "OUTCOME_ENGAGEMENT",
+    objective: "OUTCOME_TRAFFIC",
     schedule: "",
     audience: "Khách quan tâm nhà thông minh và đồ điện gia dụng",
     creativeText: "",
-    productSku: ""
+    productSku: "",
+    destinationUrl: ""
   });
 
   const encodedAccountId = useMemo(() => encodeURIComponent(accountId), [accountId]);
@@ -114,6 +127,17 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
       setStatus("Đã tải ad account thật từ Meta Marketing API.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Không tải được ad account.");
+    }
+  }
+
+  async function loadPages() {
+    try {
+      const data = await read<{ pages: FacebookPage[] }>("/api/facebook/pages");
+      const realPages = data.pages.filter((page) => page.status !== "mock");
+      setPages(realPages);
+      setDraft((current) => current.pageId || !realPages[0] ? current : { ...current, pageId: realPages[0].id });
+    } catch {
+      setPages([]);
     }
   }
 
@@ -148,6 +172,7 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
     setRefreshing(true);
     try {
       await loadAccount();
+      await loadPages();
       await loadTab(activeTab);
     } finally {
       setRefreshing(false);
@@ -177,8 +202,55 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
     }
   }
 
+  async function createLiveAd() {
+    if (!account?.writeActionsEnabled) {
+      setStatus("Ads write đang bị chặn bởi AD_WRITE_ACTIONS_ENABLED=false.");
+      return;
+    }
+    if (!draft.pageId) {
+      setStatus("Cần chọn Fanpage trước khi ghi quảng cáo thật.");
+      return;
+    }
+    if (!draft.destinationUrl) {
+      setStatus("Cần nhập link đích trước khi ghi quảng cáo thật.");
+      return;
+    }
+    const confirmed = window.confirm("Tạo quảng cáo thật trên Meta ở trạng thái tạm dừng. Tiếp tục?");
+    if (!confirmed) {
+      setStatus("Đã hủy ghi thật trước khi gọi Meta Marketing API.");
+      return;
+    }
+    setWritingLive(true);
+    try {
+      const response = await fetch(`/api/ads/accounts/${encodedAccountId}/create`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...draft,
+          productSku: selectedProduct?.sku || draft.productSku,
+          budgetDaily: Number(draft.budgetDaily)
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as ApiEnvelope<{
+        status: string;
+        campaign?: { id?: string; status?: string; effective_status?: string };
+        adset?: { id?: string; status?: string; effective_status?: string };
+        ad?: { id?: string; status?: string; effective_status?: string };
+      }> | null;
+      if (response.ok && payload?.success) {
+        setStatus(`Đã tạo quảng cáo thật ở trạng thái tạm dừng. Campaign ${payload.data.campaign?.id || "-"}, Ad ${payload.data.ad?.id || "-"}.`);
+        setActiveTab("Campaigns");
+      } else {
+        setStatus(payload && !payload.success ? payload.error ?? "Ghi Meta thật lỗi." : "Ghi Meta thật lỗi.");
+      }
+    } finally {
+      setWritingLive(false);
+    }
+  }
+
   useEffect(() => {
     void loadAccount();
+    void loadPages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encodedAccountId]);
 
@@ -294,6 +366,19 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
               <input value={draft.budgetDaily} onChange={(event) => setDraft((current) => ({ ...current, budgetDaily: event.target.value }))} className="mt-1 min-h-10 w-full rounded-md border border-slate-200 px-3 text-sm" />
             </label>
             <label className="block">
+              <span className="text-sm font-medium text-slate-700">Fanpage</span>
+              <select value={draft.pageId} onChange={(event) => setDraft((current) => ({ ...current, pageId: event.target.value }))} className="mt-1 min-h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
+                <option value="">Chọn Fanpage</option>
+                {pages.map((page) => (
+                  <option key={page.id} value={page.id}>{page.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Link đích</span>
+              <input type="url" placeholder="https://shophuyvan.vn" value={draft.destinationUrl} onChange={(event) => setDraft((current) => ({ ...current, destinationUrl: event.target.value }))} className="mt-1 min-h-10 w-full rounded-md border border-slate-200 px-3 text-sm" />
+            </label>
+            <label className="block">
               <span className="text-sm font-medium text-slate-700">Mục tiêu</span>
               <select value={draft.objective} onChange={(event) => setDraft((current) => ({ ...current, objective: event.target.value }))} className="mt-1 min-h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
                 <option>OUTCOME_ENGAGEMENT</option>
@@ -323,9 +408,17 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
             <div><span className="font-semibold text-ink">Ngân sách:</span> {money(draft.budgetDaily, account?.currency || "VND")}</div>
             <div><span className="font-semibold text-ink">Lịch chạy:</span> {draft.schedule || "Chưa chọn"}</div>
           </div>
+          <div className="mt-3 grid gap-2 rounded-md border border-brand-100 bg-brand-50 p-3 text-sm text-brand-900 sm:grid-cols-2">
+            <div><span className="font-semibold">Fanpage:</span> {pages.find((page) => page.id === draft.pageId)?.name || "Chưa chọn"}</div>
+            <div><span className="font-semibold">Link đích:</span> {draft.destinationUrl || "Chưa nhập"}</div>
+          </div>
           <button type="button" disabled={savingDraft} onClick={() => void createDraft()} className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-3 text-sm font-semibold text-white focus-ring disabled:cursor-not-allowed disabled:opacity-50">
             <Save className="h-4 w-4" aria-hidden="true" />
             {savingDraft ? "Đang xử lý..." : "Tạo draft quảng cáo"}
+          </button>
+          <button type="button" disabled={writingLive || !account?.writeActionsEnabled} onClick={() => void createLiveAd()} className="ml-0 mt-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-brand-600 bg-white px-3 text-sm font-semibold text-brand-700 focus-ring disabled:cursor-not-allowed disabled:opacity-50 sm:ml-2 sm:mt-4">
+            <Send className="h-4 w-4" aria-hidden="true" />
+            {writingLive ? "Đang ghi Meta..." : "Tạo thật tạm dừng"}
           </button>
         </section>
       ) : null}
