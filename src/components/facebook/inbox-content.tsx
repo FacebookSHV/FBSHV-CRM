@@ -3,7 +3,9 @@
 import { EyeOff, MessageCircleReply, PackageCheck, RefreshCcw, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/pages/page-header";
+import { ProductSearchPicker } from "@/components/products/product-search-picker";
 import { StatusPill } from "@/components/ui/status-pill";
+import type { ProductWithInventory } from "@/lib/ecommerce/types";
 
 type Conversation = {
   id: string;
@@ -47,7 +49,7 @@ export function InboxContent() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [reply, setReply] = useState("Dạ shop còn hàng, mình cho shop xin số điện thoại để hỗ trợ chốt đơn nhé.");
   const [commentReply, setCommentReply] = useState("Dạ shop còn hàng, mình nhắn shop để được tư vấn nhanh nhé.");
-  const [sku, setSku] = useState("CRM_TEST_001");
+  const [selectedProduct, setSelectedProduct] = useState<ProductWithInventory | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,13 +99,17 @@ export function InboxContent() {
 
   async function createOrder() {
     if (!selectedId) return;
+    if (!selectedProduct?.sku) {
+      setStatus("Cần chọn sản phẩm thật đã đồng bộ trước khi tạo đơn.");
+      return;
+    }
     const response = await fetch("/api/ecommerce/orders/from-facebook", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         customerId: `customer_${selectedId}`,
         conversationId: selectedId,
-        sku,
+        sku: selectedProduct.sku,
         quantity,
         note: "Đơn tạo từ inbox Facebook CRM"
       })
@@ -146,8 +152,8 @@ export function InboxContent() {
   return (
     <div>
       <PageHeader
-        title="Inbox/Comment"
-        subtitle="Xử lý hội thoại, bình luận và chốt đơn qua ecommerce provider."
+        title="Trung tâm CSKH Facebook"
+        subtitle="Xử lý inbox, bình luận, tư vấn sản phẩm thật và tạo đơn từ hội thoại."
         action={
           <button
             type="button"
@@ -166,9 +172,24 @@ export function InboxContent() {
 
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-soft">
         <StatusPill tone={mode === "mock" ? "warning" : "success"}>{mode === "mock" ? "Facebook chưa kết nối thật" : "Facebook real"}</StatusPill>
-        <StatusPill tone="info">Ecommerce qua provider</StatusPill>
+        <StatusPill tone="info">Chốt đơn qua Web TMĐT</StatusPill>
         {status ? <span className="text-sm text-slate-600">{status}</span> : null}
       </div>
+
+      <section className="mb-4 grid gap-3 md:grid-cols-3">
+        <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="text-2xl font-semibold tabular-nums text-ink">{conversations.length}</div>
+          <div className="text-sm text-slate-600">hội thoại</div>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="text-2xl font-semibold tabular-nums text-ink">{conversations.reduce((sum, item) => sum + item.unreadCount, 0)}</div>
+          <div className="text-sm text-slate-600">tin chưa đọc</div>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="text-2xl font-semibold tabular-nums text-ink">{comments.filter((comment) => !comment.replied).length}</div>
+          <div className="text-sm text-slate-600">bình luận cần trả lời</div>
+        </article>
+      </section>
 
       <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
         <section className="rounded-md border border-slate-200 bg-white shadow-soft">
@@ -191,8 +212,8 @@ export function InboxContent() {
                 ].join(" ")}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-semibold text-ink">{conversation.id}</span>
-                  <StatusPill tone={priorityTone(conversation.priority)}>{conversation.priority}</StatusPill>
+                  <span className="truncate text-sm font-semibold text-ink">{conversation.customerId || conversation.id}</span>
+                  <StatusPill tone={priorityTone(conversation.priority)}>{conversation.priority === "high" ? "Ưu tiên cao" : conversation.priority === "low" ? "Theo dõi" : "Bình thường"}</StatusPill>
                 </div>
                 <div className="mt-1 line-clamp-2 text-sm text-slate-600">{conversation.lastMessagePreview}</div>
                 <div className="mt-2 text-xs text-slate-500">
@@ -240,13 +261,8 @@ export function InboxContent() {
                 <Send className="h-4 w-4" aria-hidden="true" />
                 Gửi trả lời
               </button>
-              <div className="grid flex-1 grid-cols-[1fr_80px_auto] gap-2">
-                <input
-                  value={sku}
-                  onChange={(event) => setSku(event.target.value)}
-                  className="min-h-10 rounded-md border border-slate-200 px-3 text-sm focus-ring"
-                  aria-label="SKU"
-                />
+              <div className="grid flex-1 gap-2 lg:grid-cols-[1fr_80px_auto]">
+                <ProductSearchPicker label="Sản phẩm chốt đơn" selectedSku={selectedProduct?.sku} onSelect={setSelectedProduct} />
                 <input
                   type="number"
                   min={1}

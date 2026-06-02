@@ -38,7 +38,15 @@ type FacebookPage = {
   status: string;
 };
 
-const tabs = ["Overview", "Campaigns", "Ad Sets", "Ads", "Insights", "Create Ad / Draft"] as const;
+const tabs = [
+  { key: "overview", label: "Tổng quan" },
+  { key: "campaigns", label: "Chiến dịch" },
+  { key: "adsets", label: "Nhóm quảng cáo" },
+  { key: "ads", label: "Mẫu quảng cáo" },
+  { key: "insights", label: "Báo cáo" },
+  { key: "create", label: "Tạo quảng cáo" }
+] as const;
+type TabKey = (typeof tabs)[number]["key"];
 const datePresets = [
   { label: "Hôm nay", value: "today" },
   { label: "7 ngày", value: "last_7d" },
@@ -87,7 +95,7 @@ const fieldLabels: Record<string, string> = {
 };
 
 export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
-  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Overview");
+  const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [account, setAccount] = useState<AccountDetail | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [pages, setPages] = useState<FacebookPage[]>([]);
@@ -144,23 +152,23 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
   async function loadTab(tab = activeTab) {
     const requestId = ++tabRequestId.current;
     try {
-      if (tab === "Create Ad / Draft") {
+      if (tab === "create") {
         setRows([]);
         return;
       }
       const path =
-        tab === "Campaigns"
+        tab === "campaigns"
           ? `/api/ads/accounts/${encodedAccountId}/campaigns`
-          : tab === "Ad Sets"
+          : tab === "adsets"
             ? `/api/ads/accounts/${encodedAccountId}/adsets`
-            : tab === "Ads"
+            : tab === "ads"
               ? `/api/ads/accounts/${encodedAccountId}/ads`
               : `/api/ads/accounts/${encodedAccountId}/insights?date_preset=${encodeURIComponent(datePreset)}&level=${encodeURIComponent(level)}`;
       const data = await read<Record<string, Record<string, unknown>[]>>(path);
-      const key = tab === "Campaigns" ? "campaigns" : tab === "Ad Sets" ? "adsets" : tab === "Ads" ? "ads" : "insights";
+      const key = tab === "campaigns" ? "campaigns" : tab === "adsets" ? "adsets" : tab === "ads" ? "ads" : "insights";
       if (requestId !== tabRequestId.current) return;
       setRows(data[key] ?? []);
-      setStatus(`Đã tải ${data[key]?.length ?? 0} dòng cho tab ${tab}.`);
+      setStatus(`Đã tải ${data[key]?.length ?? 0} dòng từ Meta.`);
     } catch (error) {
       if (requestId !== tabRequestId.current) return;
       setRows([]);
@@ -239,7 +247,7 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
       }> | null;
       if (response.ok && payload?.success) {
         setStatus(`Đã tạo quảng cáo thật ở trạng thái tạm dừng. Campaign ${payload.data.campaign?.id || "-"}, Ad ${payload.data.ad?.id || "-"}.`);
-        setActiveTab("Campaigns");
+        setActiveTab("campaigns");
       } else {
         setStatus(payload && !payload.success ? payload.error ?? "Ghi Meta thật lỗi." : "Ghi Meta thật lỗi.");
       }
@@ -276,7 +284,7 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
             <div className="mt-3 flex flex-wrap gap-2">
               <StatusPill tone="info">{account?.status || "loading"}</StatusPill>
               <StatusPill tone={account?.writeActionsEnabled ? "warning" : "success"}>
-                {account?.writeActionsEnabled ? "Write đang bật" : "Ads write đang bị chặn bởi AD_WRITE_ACTIONS_ENABLED=false"}
+                {account?.writeActionsEnabled ? "Có thể tạo quảng cáo tạm dừng" : "Chỉ lưu nháp"}
               </StatusPill>
               {account?.currency ? <StatusPill tone="neutral">{account.currency}</StatusPill> : null}
               {account?.timezoneName ? <StatusPill tone="neutral">{account.timezoneName}</StatusPill> : null}
@@ -294,25 +302,25 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
         {tabs.map((tab) => (
           <button
             type="button"
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
             className={[
               "whitespace-nowrap rounded-md border px-3 py-2 text-sm font-semibold focus-ring",
-              activeTab === tab ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-600"
+              activeTab === tab.key ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-600"
             ].join(" ")}
           >
-            {tab}
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {activeTab === "Overview" ? (
+      {activeTab === "overview" ? (
         <section className="grid gap-3 md:grid-cols-3">
           {[
-            ["Spend", money(overview.spend, account?.currency || "VND")],
-            ["Impressions", cell(overview.impressions)],
-            ["Reach", cell(overview.reach)],
-            ["Clicks", cell(overview.clicks)],
+            ["Chi tiêu", money(overview.spend, account?.currency || "VND")],
+            ["Lượt hiển thị", cell(overview.impressions)],
+            ["Tiếp cận", cell(overview.reach)],
+            ["Lượt nhấp", cell(overview.clicks)],
             ["CTR", cell(overview.ctr)],
             ["CPC", cell(overview.cpc)]
           ].map(([label, value]) => (
@@ -324,36 +332,36 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
         </section>
       ) : null}
 
-      {activeTab === "Insights" ? (
+      {activeTab === "insights" ? (
         <div className="mb-4 grid gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-soft md:grid-cols-[1fr_1fr]">
           <label className="block">
-            <span className="text-xs font-medium text-slate-600">Date range</span>
+            <span className="text-xs font-medium text-slate-600">Khoảng thời gian</span>
             <select value={datePreset} onChange={(event) => setDatePreset(event.target.value)} className="mt-1 min-h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
               {datePresets.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-slate-600">Breakdown level</span>
+            <span className="text-xs font-medium text-slate-600">Xem theo cấp</span>
             <select value={level} onChange={(event) => setLevel(event.target.value)} className="mt-1 min-h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
-              <option value="account">account</option>
-              <option value="campaign">campaign</option>
-              <option value="adset">adset</option>
-              <option value="ad">ad</option>
+              <option value="account">Tài khoản</option>
+              <option value="campaign">Chiến dịch</option>
+              <option value="adset">Nhóm quảng cáo</option>
+              <option value="ad">Mẫu quảng cáo</option>
             </select>
           </label>
         </div>
       ) : null}
 
-      {activeTab !== "Overview" && activeTab !== "Create Ad / Draft" ? <DataTable rows={rows} /> : null}
+      {activeTab !== "overview" && activeTab !== "create" ? <DataTable rows={rows} /> : null}
 
-      {activeTab === "Create Ad / Draft" ? (
+      {activeTab === "create" ? (
         <section className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
           <div className="mb-4">
-            <h2 className="text-sm font-semibold text-ink">Tạo quảng cáo nháp</h2>
+            <h2 className="text-sm font-semibold text-ink">Tạo quảng cáo</h2>
             <p className="mt-1 text-sm text-slate-600">
               {account?.writeActionsEnabled
-                ? "Thao tác ghi thật chỉ chạy sau bước xác nhận riêng và cần quyền quản lý quảng cáo."
-                : "Ads write đang bị chặn bởi AD_WRITE_ACTIONS_ENABLED=false. Form này chỉ lưu bản nháp nội bộ."}
+                ? "Có thể tạo bản nháp hoặc tạo thật ở trạng thái tạm dừng để kiểm tra trong Meta trước khi chạy."
+                : "Hiện chỉ lưu bản nháp nội bộ; chưa bật ghi thật lên Meta."}
             </p>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
@@ -381,9 +389,9 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Mục tiêu</span>
               <select value={draft.objective} onChange={(event) => setDraft((current) => ({ ...current, objective: event.target.value }))} className="mt-1 min-h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
-                <option>OUTCOME_ENGAGEMENT</option>
-                <option>OUTCOME_TRAFFIC</option>
-                <option>OUTCOME_SALES</option>
+                <option value="OUTCOME_ENGAGEMENT">Tương tác bài viết</option>
+                <option value="OUTCOME_TRAFFIC">Kéo khách vào website</option>
+                <option value="OUTCOME_SALES">Mua hàng</option>
               </select>
             </label>
             <label className="block">
@@ -428,7 +436,7 @@ export function AdsAccountDetailContent({ accountId }: { accountId: string }) {
 
 function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
   if (rows.length === 0) {
-    return <div className="rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-soft">Không có dữ liệu hoặc API đang bị chặn bởi permission.</div>;
+    return <div className="rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-soft">Chưa có dữ liệu trong khoảng này hoặc tài khoản chưa có chiến dịch phù hợp.</div>;
   }
   const columns = Object.keys(rows[0] ?? {}).slice(0, 9);
   return (

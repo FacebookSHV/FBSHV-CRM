@@ -277,11 +277,15 @@ export function ContentPlannerContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const draftCount = posts.filter((post) => post.status === "draft").length;
+  const scheduledCount = posts.filter((post) => post.status === "scheduled").length;
+  const publishedCount = posts.filter((post) => post.status === "published").length;
+
   return (
     <div>
       <PageHeader
-        title="Content Planner"
-        subtitle="Tạo bài, chọn sản phẩm thật, media R2, giờ đăng và publish job riêng theo từng Fanpage."
+        title="Lịch đăng bài"
+        subtitle="Soạn nội dung bán hàng, chọn sản phẩm thật, lên lịch theo Fanpage và kiểm tra trạng thái đăng bài."
         action={
           <div className="flex gap-2">
             <button type="button" onClick={() => void loadPlanner()} className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 focus-ring" aria-label="Tải lại" title="Tải lại">
@@ -289,16 +293,35 @@ export function ContentPlannerContent() {
             </button>
             <button type="button" onClick={() => void generateIdeas()} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-brand-600 px-3 text-sm font-semibold text-white focus-ring">
               <WandSparkles className="h-4 w-4" aria-hidden="true" />
-              Tạo ý tưởng
+              Gợi ý nội dung
             </button>
           </div>
         }
       />
 
+      <section className="mb-4 grid gap-3 md:grid-cols-4">
+        <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="text-2xl font-semibold tabular-nums text-ink">{draftCount}</div>
+          <div className="text-sm text-slate-600">bài nháp</div>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="text-2xl font-semibold tabular-nums text-ink">{scheduledCount}</div>
+          <div className="text-sm text-slate-600">bài đã lên lịch</div>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="text-2xl font-semibold tabular-nums text-ink">{publishedCount}</div>
+          <div className="text-sm text-slate-600">bài đã đăng</div>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="text-2xl font-semibold tabular-nums text-ink">{selectedPageIds.length}</div>
+          <div className="text-sm text-slate-600">Fanpage đang chọn</div>
+        </article>
+      </section>
+
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-soft">
-        <StatusPill tone="info">Publish job theo Page</StatusPill>
+        <StatusPill tone="info">Lệnh đăng theo Fanpage</StatusPill>
         <StatusPill tone={publishSettings.autoPublishEnabled ? "danger" : "warning"}>
-          {publishSettings.autoPublishEnabled ? "Publish thật đang bật" : "Dry-run khi chưa bật publish thật"}
+          {publishSettings.autoPublishEnabled ? "Đăng thật đang bật" : "Chạy thử khi chưa bật đăng thật"}
         </StatusPill>
         <span className="text-sm text-slate-600">{status}</span>
       </div>
@@ -326,14 +349,14 @@ export function ContentPlannerContent() {
       <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <section className="rounded-md border border-slate-200 bg-white shadow-soft">
           <div className="border-b border-slate-200 px-4 py-3">
-            <h2 className="text-sm font-semibold text-ink">Ý tưởng mới</h2>
+            <h2 className="text-sm font-semibold text-ink">Gợi ý nội dung mới</h2>
           </div>
           <div className="grid gap-3 p-4 md:grid-cols-2">
             {ideas.map((idea) => (
               <article key={idea.id} className="rounded-md border border-slate-200 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusPill tone="info">{idea.template}</StatusPill>
-                  <StatusPill tone={idea.aiMode === "ai" ? "success" : "warning"}>{idea.aiMode === "ai" ? "AI" : "Template"}</StatusPill>
+                  <StatusPill tone={idea.aiMode === "ai" ? "success" : "warning"}>{idea.aiMode === "ai" ? "AI thật" : "Mẫu an toàn"}</StatusPill>
                   <span className="text-xs text-slate-500">{idea.productSku}</span>
                 </div>
                 <h3 className="mt-2 text-sm font-semibold text-ink">{idea.title}</h3>

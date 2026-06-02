@@ -3,6 +3,8 @@ import { getAiConfig } from "@/lib/ai/provider";
 import { getEcommerceProvider } from "@/lib/ecommerce/provider";
 import { getFacebookRuntimeConfigAsync } from "@/lib/facebook/env";
 import { getAdsReadiness } from "@/lib/facebook/ads";
+import { getBusinessSdkStatus } from "@/lib/facebook/business-sdk";
+import { getConversionsStatus } from "@/lib/meta/conversions";
 import { listAiProviderPublicStatus } from "./ai-keys";
 
 function present(value?: string) {
@@ -23,9 +25,12 @@ export async function getRuntimeSettingsStatus() {
   const facebook = await getFacebookRuntimeConfigAsync();
   const ai = await listAiProviderPublicStatus();
   const ads = await getAdsReadiness();
+  const businessSdk = await getBusinessSdkStatus();
+  const conversions = await getConversionsStatus();
   const bindings = await getBindings();
   const ecommerce = getEcommerceProvider();
   const aiConfig = getAiConfig();
+  const activeAiProvider = ai.keys.find((key) => key.status === "valid")?.provider ?? ai.keys[0]?.provider ?? aiConfig.provider;
 
   return {
     facebook: {
@@ -41,7 +46,7 @@ export async function getRuntimeSettingsStatus() {
       baseUrl: present(process.env.ECOMMERCE_API_BASE_URL) ? process.env.ECOMMERCE_API_BASE_URL : null
     },
     ai: {
-      provider: aiConfig.provider,
+      provider: activeAiProvider,
       configured: ai.keys.length > 0,
       slots: ai.slots,
       keys: ai.keys
@@ -58,7 +63,14 @@ export async function getRuntimeSettingsStatus() {
       status: ads.status,
       missingPermissions: ads.missingPermissions,
       writeActionsEnabled: ads.writeActionsEnabled,
-      accountCount: ads.accounts.length
+      accountCount: ads.accounts.length,
+      businessSdk
+    },
+    conversions,
+    socialUx: {
+      plannerReference: "Postiz/Mixpost-inspired",
+      inboxReference: "Chatwoot-inspired",
+      integratedInCrm: true
     },
     webhook: {
       verifyTokenConfigured: present(process.env.META_VERIFY_TOKEN),

@@ -60,6 +60,23 @@ function canDelete(post: ContentPost) {
   return post.status === "draft" || post.status === "scheduled";
 }
 
+function postStatusLabel(status: ContentPost["status"]) {
+  if (status === "draft") return "Bài nháp";
+  if (status === "scheduled") return "Đã lên lịch";
+  if (status === "published") return "Đã đăng";
+  if (status === "failed") return "Đăng lỗi";
+  if (status === "cancelled") return "Đã huỷ";
+  return status;
+}
+
+function publishJobLabel(status: string, dryRun: boolean) {
+  if (dryRun || status === "dry_run") return "Chạy thử";
+  if (status === "published") return "Đã đăng";
+  if (status === "failed") return "Đăng lỗi";
+  if (status === "pending") return "Đang chờ";
+  return status;
+}
+
 export function ContentPlannerPostList({
   posts,
   pages,
@@ -91,14 +108,14 @@ export function ContentPlannerPostList({
       </div>
       <div className="divide-y divide-slate-100">
         {posts.length === 0 ? (
-          <div className="p-4 text-sm text-slate-600">Chưa có bài nháp hoặc lịch đăng trong D1.</div>
+          <div className="p-4 text-sm text-slate-600">Chưa có bài nháp hoặc lịch đăng.</div>
         ) : null}
         {posts.map((post) => (
           <article key={post.id} className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="min-w-0 truncate text-sm font-semibold text-ink">{post.title}</h3>
-                <StatusPill tone={statusTone(post.status)}>{post.status}</StatusPill>
+                <StatusPill tone={statusTone(post.status)}>{postStatusLabel(post.status)}</StatusPill>
                 {post.productSku ? <span className="text-xs text-slate-500">SKU {post.productSku}</span> : null}
               </div>
               <p className="mt-2 line-clamp-2 text-sm text-slate-600">{post.caption}</p>
@@ -110,8 +127,8 @@ export function ContentPlannerPostList({
                 type="button"
                 onClick={() => onStartEdit(post)}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-700 focus-ring"
-                aria-label="Edit bài"
-                title="Edit bài"
+                aria-label="Chỉnh sửa bài"
+                title="Chỉnh sửa bài"
               >
                 <Pencil className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -128,8 +145,8 @@ export function ContentPlannerPostList({
                 type="button"
                 onClick={() => onPublish(post)}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-brand-200 text-brand-700 focus-ring"
-                aria-label="Tạo job đăng"
-                title={`Tạo job đăng ${selectedPageIds.length || 1} Page`}
+                aria-label="Tạo lệnh đăng"
+                title={`Tạo lệnh đăng cho ${selectedPageIds.length || 1} Fanpage`}
               >
                 <Send className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -138,8 +155,8 @@ export function ContentPlannerPostList({
                 onClick={() => onRequestDelete(post)}
                 disabled={!canDelete(post)}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-red-200 text-red-700 focus-ring disabled:opacity-40"
-                aria-label="Delete bài nháp hoặc scheduled"
-                title={canDelete(post) ? "Delete bài nháp/scheduled" : "Chỉ xóa draft hoặc scheduled"}
+                aria-label="Xoá bài"
+                title={canDelete(post) ? "Xoá bài nháp hoặc bài đã lên lịch" : "Chỉ xóa bài nháp hoặc bài đã lên lịch"}
               >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -150,16 +167,16 @@ export function ContentPlannerPostList({
 
       {publishJobs.length > 0 ? (
         <div className="border-t border-slate-200 p-4">
-          <h3 className="text-sm font-semibold text-ink">Publish job preview mới nhất</h3>
+          <h3 className="text-sm font-semibold text-ink">Lệnh đăng mới nhất</h3>
           <div className="mt-3 grid gap-2">
             {publishJobs.map((job) => (
               <div key={job.id} className="grid gap-2 rounded-md border border-slate-200 p-3 text-sm sm:grid-cols-[1fr_auto]">
                 <div className="min-w-0">
-                  <div className="font-medium text-ink">Page {job.pageId}</div>
+                  <div className="font-medium text-ink">Fanpage {job.pageId}</div>
                   {job.error ? <div className="mt-1 text-xs text-slate-600">{job.error}</div> : null}
                 </div>
                 <StatusPill tone={jobTone(job.status, job.dryRun)}>
-                  {job.dryRun ? "dry_run" : job.status}
+                  {publishJobLabel(job.status, job.dryRun)}
                 </StatusPill>
               </div>
             ))}
@@ -168,7 +185,7 @@ export function ContentPlannerPostList({
       ) : null}
 
       {editing ? (
-        <Modal title="Edit bài" onClose={onCancelEdit}>
+        <Modal title="Chỉnh sửa bài" onClose={onCancelEdit}>
           <div className="grid gap-3">
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Tiêu đề</span>

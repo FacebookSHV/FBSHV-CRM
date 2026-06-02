@@ -208,7 +208,7 @@ export function ContentPlannerEditor({
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white focus-ring"
         >
           <Send className="h-4 w-4" aria-hidden="true" />
-          Tạo job nhiều Page
+          Đăng theo Fanpage
         </button>
       </div>
     </section>

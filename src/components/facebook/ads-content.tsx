@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, PlugZap, RefreshCcw, ShieldAlert } from "lucide-react";
+import { BarChart3, ChevronRight, Megaphone, PlugZap, RefreshCcw, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "@/components/pages/page-header";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -14,9 +14,6 @@ type AdsReadiness = {
 };
 
 type ApiEnvelope<T> = { success: true; data: T } | { success: false; error?: string; code?: string };
-
-const requiredRead = ["business_management", "ads_read"];
-const requiredWrite = ["ads_management"];
 
 export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadiness }) {
   const [readiness, setReadiness] = useState(initialReadiness);
@@ -46,10 +43,10 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
   return (
     <div>
       <PageHeader
-        title="Facebook Ads"
+        title="Quản lý quảng cáo Facebook"
         subtitle={readiness.writeActionsEnabled
-          ? "Kết nối, đọc dữ liệu Meta Ads thật và cho phép ghi thật sau bước xác nhận; object mới được tạo ở trạng thái tạm dừng."
-          : "Kết nối và quản lý ad account thật ở chế độ read-only; Ads write bị chặn nếu chưa bật cờ an toàn."}
+          ? "Theo dõi tài khoản quảng cáo thật, xem chiến dịch và tạo quảng cáo mới ở trạng thái tạm dừng để kiểm tra trước khi chạy."
+          : "Theo dõi tài khoản quảng cáo thật và chuẩn bị bản nháp quảng cáo an toàn."}
         action={
           <div className="flex gap-2">
             <a
@@ -57,7 +54,7 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
               className="inline-flex min-h-10 items-center gap-2 rounded-md bg-brand-600 px-3 text-sm font-semibold text-white focus-ring"
             >
               <PlugZap className="h-4 w-4" aria-hidden="true" />
-              Connect Ads Account
+              Kết nối tài khoản Ads
             </a>
             <button type="button" disabled={refreshing} onClick={() => void refreshAccounts()} className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 focus-ring disabled:cursor-not-allowed disabled:opacity-50" aria-label="Kiểm tra lại Ads" title="Kiểm tra lại Ads">
               <RefreshCcw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
@@ -66,21 +63,39 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
         }
       />
 
+      <section className="mb-4 grid gap-3 md:grid-cols-3">
+        <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+          <BarChart3 className="h-5 w-5 text-brand-600" aria-hidden="true" />
+          <div className="mt-3 text-2xl font-semibold tabular-nums text-ink">{readiness.accounts.length}</div>
+          <div className="text-sm text-slate-600">tài khoản quảng cáo thật</div>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+          <ShieldCheck className="h-5 w-5 text-brand-600" aria-hidden="true" />
+          <div className="mt-3 text-lg font-semibold text-ink">{readiness.status === "ready" ? "Sẵn sàng đọc dữ liệu" : "Cần kết nối lại"}</div>
+          <div className="text-sm text-slate-600">{readiness.status === "ready" ? "Campaign, nhóm quảng cáo, mẫu quảng cáo và báo cáo lấy từ Meta." : "Kết nối lại Facebook để cấp quyền Ads."}</div>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
+          <Megaphone className="h-5 w-5 text-brand-600" aria-hidden="true" />
+          <div className="mt-3 text-lg font-semibold text-ink">{readiness.writeActionsEnabled ? "Tạo thật tạm dừng" : "Chỉ lưu nháp"}</div>
+          <div className="text-sm text-slate-600">{readiness.writeActionsEnabled ? "Mọi quảng cáo mới cần xác nhận và được tạo ở trạng thái tạm dừng." : "Chưa bật ghi thật, người dùng vẫn tạo được draft nội bộ."}</div>
+        </article>
+      </section>
+
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-soft">
-        <StatusPill tone={readiness.status === "ready" ? "success" : "warning"}>{readiness.status}</StatusPill>
+        <StatusPill tone={readiness.status === "ready" ? "success" : "warning"}>{readiness.status === "ready" ? "Đã kết nối" : "Cần kiểm tra"}</StatusPill>
         <span className="text-sm text-slate-600">{status}</span>
       </div>
 
       <section className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-ink">Trạng thái Ads account</h2>
+            <h2 className="text-sm font-semibold text-ink">Tài khoản quảng cáo</h2>
             <p className="mt-1 text-sm text-slate-600">
               {readiness.status === "blocked"
-                ? `Thiếu quyền ${readiness.missingPermissions.join(", ")} nên chưa gọi Ads Graph API.`
+                ? "Cần kết nối lại Facebook Ads để cấp đủ quyền đọc tài khoản quảng cáo."
                 : readiness.status === "empty"
-                  ? "Đã có quyền đọc nhưng chưa cache được ad account thật trong CRM."
-                  : "Đã cache ad account thật. Bấm vào từng account để xem campaign, ad set, ads, insights và tạo draft."}
+                  ? "Đã có quyền đọc nhưng chưa tìm thấy tài khoản quảng cáo thật."
+                  : "Bấm vào từng tài khoản để xem chiến dịch, nhóm quảng cáo, mẫu quảng cáo, báo cáo và tạo quảng cáo."}
             </p>
           </div>
           <StatusPill tone={readiness.writeActionsEnabled ? "warning" : "success"}>
@@ -105,26 +120,13 @@ export function AdsContent({ initialReadiness }: { initialReadiness: AdsReadines
                 <ChevronRight className="h-5 w-5 flex-none text-slate-400 group-hover:text-brand-700" aria-hidden="true" />
               </div>
               <div className="mt-3"><StatusPill tone="info">{account.status}</StatusPill></div>
+              <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-brand-700">
+                Mở quản lý <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </div>
             </Link>
           ))}
         </section>
       ) : null}
-
-      <section className="mt-4 grid gap-3 md:grid-cols-3">
-        {[...requiredRead, ...requiredWrite].map((scope) => (
-          <article key={scope} className="rounded-md border border-slate-200 bg-white p-4 shadow-soft">
-            <ShieldAlert className="h-5 w-5 text-brand-600" aria-hidden="true" />
-            <h3 className="mt-3 text-sm font-semibold text-ink">{scope}</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              {scope === "ads_management"
-                ? readiness.writeActionsEnabled
-                  ? "Dùng cho thao tác ghi Ads thật; mỗi lần ghi vẫn cần xác nhận và tạo ở trạng thái tạm dừng."
-                  : "Chỉ dùng cho thao tác ghi Ads, hiện bị chặn bởi AD_WRITE_ACTIONS_ENABLED nếu chưa bật."
-                : "Cần cho Connect Ads Account và đọc danh sách ad account thật."}
-            </p>
-          </article>
-        ))}
-      </section>
     </div>
   );
 }

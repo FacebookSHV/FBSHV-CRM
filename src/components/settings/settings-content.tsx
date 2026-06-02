@@ -16,7 +16,22 @@ type RuntimeStatus = {
     keys: Array<{ provider: string; keyName: string; source: string; masked: string; status: string; lastError?: string | null }>;
   };
   cloudflare: { worker: string; expectedAccountId: string; d1: boolean; r2: boolean; d1DatabaseName: string; r2BucketName: string };
-  ads: { status: string; missingPermissions: string[]; writeActionsEnabled: boolean; accountCount: number };
+  ads: {
+    status: string;
+    missingPermissions: string[];
+    writeActionsEnabled: boolean;
+    accountCount: number;
+    businessSdk?: { installed: boolean; usable: boolean; provider: string; version: string | null; mode: string };
+  };
+  conversions: {
+    configured: boolean;
+    pixelConfigured: boolean;
+    accessTokenConfigured: boolean;
+    testEventCodeConfigured: boolean;
+    provider: string;
+    mode: string;
+  };
+  socialUx: { plannerReference: string; inboxReference: string; integratedInCrm: boolean };
   webhook: { verifyTokenConfigured: boolean; facebookCallback: string; facebookWebhook: string };
 };
 
@@ -157,10 +172,40 @@ export function SettingsContent() {
               lines={[`Worker: ${status.cloudflare.worker}`, `Account: ${status.cloudflare.expectedAccountId}`, `D1 ${status.cloudflare.d1DatabaseName}: ${status.cloudflare.d1 ? "có binding" : "thiếu binding"}`, `R2 ${status.cloudflare.r2BucketName}: ${status.cloudflare.r2 ? "có binding" : "thiếu binding"}`]}
             />
             <StatusCard
-              title="Ads status"
+              title="Quảng cáo Facebook"
               icon={<ShieldAlert />}
               ok={status.ads.status === "ready"}
-              lines={[`Trạng thái: ${status.ads.status}`, `Ad account cache: ${status.ads.accountCount}`, `Write: ${status.ads.writeActionsEnabled ? "đang bật" : "đang chặn"}`, status.ads.missingPermissions.length ? `Thiếu quyền: ${status.ads.missingPermissions.join(", ")}` : "Không thiếu quyền đọc đã ghi nhận"]}
+              lines={[
+                `Tài khoản đã kết nối: ${status.ads.accountCount}`,
+                `Tạo quảng cáo thật: ${status.ads.writeActionsEnabled ? "đang bật, luôn tạo tạm dừng" : "đang chặn an toàn"}`,
+                status.ads.businessSdk?.installed && status.ads.businessSdk.usable
+                  ? `SDK Meta chính thức: đã cài ${status.ads.businessSdk.version}`
+                  : status.ads.businessSdk?.installed
+                    ? "SDK Meta chính thức: đã cài, Worker dùng Graph API trực tiếp"
+                    : "SDK Meta chính thức: chưa cài",
+                status.ads.missingPermissions.length ? "Cần kết nối lại quyền Ads" : "Quyền đọc Ads đang sẵn sàng"
+              ]}
+            />
+            <StatusCard
+              title="Pixel + CAPI"
+              icon={<ShieldAlert />}
+              ok={status.conversions.configured}
+              lines={[
+                `Trạng thái: ${status.conversions.configured ? "sẵn sàng gửi server-side" : "cần cấu hình Pixel/CAPI"}`,
+                `Pixel: ${status.conversions.pixelConfigured ? "đã cấu hình" : "chưa có"}`,
+                `CAPI token: ${status.conversions.accessTokenConfigured ? "đã cấu hình" : "chưa có"}`,
+                `Test event: ${status.conversions.testEventCodeConfigured ? "đã bật" : "chưa bật"}`
+              ]}
+            />
+            <StatusCard
+              title="Trải nghiệm vận hành"
+              icon={<CheckCircle2 />}
+              ok={status.socialUx.integratedInCrm}
+              lines={[
+                "Lịch nội dung: đã đưa về luồng CRM theo mẫu Postiz/Mixpost",
+                "Inbox CSKH: đã đưa về luồng CRM theo mẫu Chatwoot",
+                "Không nhúng app ngoài, chỉ tích hợp capability vào CRM"
+              ]}
             />
             <StatusCard
               title="Webhook"

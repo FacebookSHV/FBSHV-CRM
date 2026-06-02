@@ -1,6 +1,7 @@
 export * from "./ads";
 export * from "./automation";
 export * from "./content";
+export * from "./conversions";
 export * from "./core";
 export * from "./orders";
 export * from "./page-audit";

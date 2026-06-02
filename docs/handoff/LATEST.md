@@ -218,6 +218,90 @@ File đã sửa:
   - Ad set row `120248500980650206 | Boost post draft - Nhóm quảng cáo | PAUSED | LINK_CLICKS | budget 100000`.
   - Ad row `120248500983870206 | Boost post draft - Quảng cáo | PAUSED`.
 
+## Cập nhật Meta SDK, CAPI và UI vận hành - 2026-06-02
+
+### Code và deploy
+
+- Đã cài `facebook-nodejs-business-sdk@24.0.1`.
+- Đã thêm status adapter `src/lib/facebook/business-sdk.ts`.
+- Đã thêm Meta Pixel + CAPI server endpoint:
+  - `POST /api/meta/capi/events`
+  - bảng D1 `conversion_events`
+  - migration `drizzle/0006_meta_capi_events.sql`
+  - dedup bằng `event_id`
+  - hash email/phone bằng SHA-256 trước khi gửi Meta
+  - lỗi thiếu config được log `config_missing`, không fake success.
+- Đã cập nhật Settings runtime để hiển thị:
+  - SDK Meta chính thức đã cài.
+  - Worker dùng Graph API trực tiếp do SDK Node không chạy trực tiếp trong Cloudflare Worker.
+  - Pixel + CAPI đang thiếu Pixel/token nếu chưa set secret.
+  - AI provider ưu tiên hiển thị `gemini` khi có key valid trong Settings DB.
+- Đã làm lại UI vận hành người dùng cuối:
+  - `/ads`: summary dễ đọc, card account clickable, bỏ hiển thị scope kỹ thuật.
+  - `/ads/accounts/:accountId`: tab tiếng Việt, dữ liệu Meta thật, form tạo quảng cáo dễ hiểu hơn.
+  - `/content-planner`: summary draft/scheduled/published/page, label trạng thái tiếng Việt.
+  - `/inbox`: thêm summary CSKH và product picker thật khi tạo đơn.
+  - `/settings`: thêm status SDK/CAPI/social UX.
+- Latest deploy: `738f5529-bb20-49cc-8b76-a660ba132363`.
+
+### Checks đã chạy và pass
+
+- `npm run secrets:check`
+- `npm run check:env`
+- `npm run hygiene:check`
+- `npm run size:check`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run test`
+- `npm run build`
+- `npm run build:cloudflare`
+- `npm run cloudflare:check`
+- D1 migration remote `0006_meta_capi_events.sql` đã apply vào `fbshv_crm_db`.
+
+### Production verification bằng Chrome visible profile
+
+- Chrome profile đã dùng: `E:\codex-chrome-profiles\fbshv-meta`.
+- `/ads`:
+  - 3 account thật đều click được:
+    - `act_507856080770596`
+    - `act_750430830961447`
+    - `act_759411594070976`
+  - Không còn card scope kỹ thuật.
+- `/ads/accounts/act_750430830961447`:
+  - Click tab `Chiến dịch`: tải 2 dòng Meta thật.
+  - Click tab `Nhóm quảng cáo`: tải 2 dòng Meta thật.
+  - Click tab `Mẫu quảng cáo`: tải 2 dòng Meta thật.
+  - Click tab `Báo cáo`: trả empty state thật trong khoảng hiện tại.
+  - Click tab `Tạo quảng cáo`: có Fanpage, mục tiêu, lịch chạy, product picker thật, nút draft.
+- `/content-planner`:
+  - Mobile/tablet/desktop không tràn ngang.
+  - Product picker hiện SKU thật từ D1 cache, ví dụ `1_BO_CS_300W_K268`.
+- `/inbox`:
+  - Mobile/tablet/desktop không tràn ngang.
+  - Có product picker thật, không còn default SKU hard-coded.
+- `/settings`:
+  - Mobile/desktop không tràn ngang.
+  - AI provider hiển thị `gemini`.
+  - Gemini keys chỉ masked:
+    - `GEMINI_API_KEY_1`: `AIzaSy...C9yA`, `valid`.
+    - `GEMINI_API_KEY_2`: `AIzaSy...b4wI`, `valid`.
+    - `GEMINI_API_KEY_3`: `AIzaSy...UvOk`, `permission_denied`.
+  - Pixel + CAPI hiển thị cần cấu hình Pixel/token.
+- `POST /api/meta/capi/events`:
+  - Production trả `400` với code `META_CAPI_CONFIG_MISSING`.
+  - D1 `conversion_events` ghi `status=config_missing`, lỗi sanitize `Thiếu Pixel ID hoặc CAPI access token.`
+
+### Blocker còn lại
+
+- Pixel + CAPI đã có code/API/database/UI nhưng chưa live-send được vì Cloudflare Worker chưa có:
+  - `META_PIXEL_ID`
+  - `META_CAPI_ACCESS_TOKEN`
+  - optional `META_TEST_EVENT_CODE`
+- Đã kiểm bằng:
+  - `wrangler secret list` trên account đúng, không thấy các secret trên.
+  - Chrome visible vào Meta Business Suite, bấm `Trình quản lý sự kiện`; Meta không mở được trang Pixel/CAPI token usable, link Events Manager redirect/404 hoặc giữ ở Business Suite.
+- Cần set secret hợp lệ mới chuyển CAPI từ `needs_config` sang live send.
+
 ### Draft nội bộ và product picker
 
 - Product picker trong form Ads đã lấy sản phẩm thật từ D1:

@@ -16,7 +16,9 @@ import {
   resetContentPublishingMemoryForTests
 } from "@/lib/content-publishing";
 import { getAdsReadiness, publishAdDraft } from "@/lib/facebook/ads";
+import { getBusinessSdkStatus } from "@/lib/facebook/business-sdk";
 import { getMemoryFacebookStoreForTests } from "@/lib/facebook/store";
+import { getConversionsStatus, sendMetaConversionEvent } from "@/lib/meta/conversions";
 import { runPageAudit, resetPageAuditMemoryForTests } from "@/lib/page-audit";
 
 describe("growth modules", () => {
@@ -24,6 +26,9 @@ describe("growth modules", () => {
     process.env.MOCK_ECOMMERCE_API = "true";
     process.env.MOCK_EXTERNAL_APIS = "true";
     process.env.AUTO_PUBLISH_POSTS_ENABLED = "false";
+    delete process.env.META_PIXEL_ID;
+    delete process.env.META_CAPI_ACCESS_TOKEN;
+    delete process.env.META_TEST_EVENT_CODE;
     getMemoryFacebookStoreForTests().resetForTests();
     resetContentPlannerMemoryForTests();
     resetContentPublishingMemoryForTests();
@@ -118,6 +123,22 @@ describe("growth modules", () => {
     expect(readiness.status).toBe("blocked");
     expect(readiness.missingPermissions).toContain("ads_read");
     await expect(publishAdDraft("draft_test")).rejects.toThrow("AD_WRITE_ACTIONS_DISABLED");
+  });
+
+  it("Meta Business SDK chính thức đã cài và có object Ads nền", async () => {
+    const status = await getBusinessSdkStatus();
+    expect(status.installed).toBe(true);
+    expect(status.usable).toBe(true);
+    expect(status.provider).toBe("facebook/facebook-nodejs-business-sdk");
+  });
+
+  it("Meta CAPI phân loại thiếu Pixel/token, không fake gửi thành công", async () => {
+    await expect(sendMetaConversionEvent({ eventName: "Purchase", eventId: "evt_missing_capi_test" }))
+      .rejects.toThrow("META_CAPI_CONFIG_MISSING");
+    const status = await getConversionsStatus();
+    expect(status.configured).toBe(false);
+    expect(status.pixelConfigured).toBe(false);
+    expect(status.accessTokenConfigured).toBe(false);
   });
 
   it("API Fanpage public không trả token đã mã hóa ra trình duyệt", async () => {
