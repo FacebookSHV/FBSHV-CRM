@@ -291,16 +291,38 @@ File đã sửa:
   - Production trả `400` với code `META_CAPI_CONFIG_MISSING`.
   - D1 `conversion_events` ghi `status=config_missing`, lỗi sanitize `Thiếu Pixel ID hoặc CAPI access token.`
 
-### Blocker còn lại
+### Pixel + CAPI đã cấu hình tiếp sau khi user yêu cầu làm nốt
 
-- Pixel + CAPI đã có code/API/database/UI nhưng chưa live-send được vì Cloudflare Worker chưa có:
+- Sau khi kiểm `.env.local`, `profiles.local.json` và `wrangler secret list`, ban đầu chưa có `META_PIXEL_ID`/`META_CAPI_ACCESS_TOKEN`.
+- Đã dùng encrypted Meta connection token trong D1, giải mã local bằng `ENCRYPTION_KEY` mà không in token ra output.
+- Đã gọi Graph API `/adspixels` cho 3 ad account thật:
+  - `act_507856080770596`: truy cập được, không có pixel trả về.
+  - `act_750430830961447`: Meta trả `403`, owner chưa grant `ads_management` hoặc `ads_read` cho pixel query.
+  - `act_759411594070976`: trả Pixel thật `635875943626253` - `Pixel Shop Huy Vân`.
+- Đã test trực tiếp Meta CAPI bằng token hiện có:
+  - Pixel `635875943626253`.
+  - Kết quả `events_received=1`.
+- Đã set Cloudflare Worker secrets trên account đúng `3d1e8c3bd1f4f9ace7388e60dd11fbed`:
   - `META_PIXEL_ID`
   - `META_CAPI_ACCESS_TOKEN`
-  - optional `META_TEST_EVENT_CODE`
-- Đã kiểm bằng:
-  - `wrangler secret list` trên account đúng, không thấy các secret trên.
-  - Chrome visible vào Meta Business Suite, bấm `Trình quản lý sự kiện`; Meta không mở được trang Pixel/CAPI token usable, link Events Manager redirect/404 hoặc giữ ở Business Suite.
-- Cần set secret hợp lệ mới chuyển CAPI từ `needs_config` sang live send.
+  - Không in giá trị token.
+- Production `/api/settings/runtime` hiện trả:
+  - `conversions.configured=true`
+  - `pixelConfigured=true`
+  - `accessTokenConfigured=true`
+  - `mode=ready`
+- Production `POST /api/meta/capi/events` đã trả HTTP `200`:
+  - `status=sent`
+  - `eventsReceived=1`
+- D1 `conversion_events` đã ghi:
+  - `event_name=PageView`
+  - `status=sent`
+  - `response_json={"eventsReceived":1,"messages":[]}`
+
+### Lưu ý còn lại
+
+- `META_TEST_EVENT_CODE` chưa cấu hình, chỉ cần nếu muốn xem event trong tab Test Events của Meta Events Manager.
+- `META_CAPI_ACCESS_TOKEN` đang lấy từ token kết nối Meta active đã mã hóa trong CRM D1. Nếu reconnect/rotate Facebook token sau này, cần cập nhật lại secret này.
 
 ### Draft nội bộ và product picker
 

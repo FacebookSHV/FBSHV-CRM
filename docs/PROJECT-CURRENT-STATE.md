@@ -29,23 +29,24 @@ Last updated: 2026-06-02
 
 - Installed `facebook-nodejs-business-sdk@24.0.1`.
 - Local/Node test confirms the official SDK exposes Ads objects. Cloudflare Worker runtime uses the existing Graph API fetch adapter because the official Node SDK is not directly usable in Worker runtime.
-- Added Meta Pixel + Conversions API endpoint:
+- Added and enabled Meta Pixel + Conversions API endpoint:
   - `POST /api/meta/capi/events`
   - D1 table: `conversion_events`
   - Dedup key: unique `event_id`
   - Missing config is logged as `config_missing`, not faked as success.
+  - After configuring Cloudflare secrets, production live-send returned `eventsReceived=1` and D1 logged `status=sent`.
 
-## Current Blockers / Missing External Config
+## Current External Config
 
-- Pixel + CAPI is implemented but not fully enabled because Worker secrets are missing:
-  - `META_PIXEL_ID`
-  - `META_CAPI_ACCESS_TOKEN`
-  - optional `META_TEST_EVENT_CODE`
+- Pixel + CAPI is now enabled with Cloudflare Worker secrets:
+  - `META_PIXEL_ID`: configured.
+  - `META_CAPI_ACCESS_TOKEN`: configured from the valid encrypted Meta connection token already stored in CRM D1.
+  - `META_TEST_EVENT_CODE`: optional, not configured.
 - Verified by:
-  - `wrangler secret list` on the correct Cloudflare account.
-  - Production `POST /api/meta/capi/events` returning `META_CAPI_CONFIG_MISSING`.
-  - D1 `conversion_events` logging `status=config_missing`.
-  - Chrome visible profile opening Meta Business Suite and attempting Events Manager; Events Manager direct link/Business Suite link did not expose a usable Pixel/CAPI token flow.
+  - Graph API found Pixel `635875943626253` (`Pixel Shop Huy Van`) under real ad account access.
+  - Direct Meta CAPI permission test returned `events_received=1`.
+  - Production `POST /api/meta/capi/events` returned HTTP `200`.
+  - D1 `conversion_events` logged `status=sent` with `response_json={"eventsReceived":1,"messages":[]}`.
 
 ## Current Verification Notes
 
@@ -76,4 +77,5 @@ Last updated: 2026-06-02
 
 ## Open Follow-Up
 
-- To enable live Pixel + CAPI, provide or create valid `META_PIXEL_ID` and `META_CAPI_ACCESS_TOKEN`, then set them as Cloudflare Worker secrets for `fbshv-crm` on account `3d1e8c3bd1f4f9ace7388e60dd11fbed`.
+- `META_TEST_EVENT_CODE` is optional and not configured. Add it later only if Events Manager test-event diagnostics are needed.
+- The CAPI token source is the current active encrypted Meta connection token. If the Facebook connection is rotated or expires, refresh Facebook connection and update `META_CAPI_ACCESS_TOKEN` accordingly.
