@@ -24,6 +24,7 @@ Last updated: 2026-06-02
 - Ads has 3 real cached ad accounts, clickable detail pages, real campaigns/adsets/ads/insights calls, draft create, and live-write creation in Meta with objects created as `PAUSED`.
 - Inbox now uses a real product picker from the CRM product cache when creating ecommerce orders from a Facebook conversation.
 - Settings shows real runtime status for Meta, Ecommerce, Cloudflare, Ads, Webhook, AI, Meta SDK status, Pixel + CAPI status, and social UX integration.
+- Facebook automation live-write is enabled for Messenger auto reply, comment auto reply, and phone-number comment hiding.
 
 ## New Integrations Added
 
@@ -47,6 +48,11 @@ Last updated: 2026-06-02
   - Direct Meta CAPI permission test returned `events_received=1`.
   - Production `POST /api/meta/capi/events` returned HTTP `200`.
   - D1 `conversion_events` logged `status=sent` with `response_json={"eventsReceived":1,"messages":[]}`.
+- Facebook automation live-write secrets are enabled:
+  - `AUTO_REPLY_MESSAGES_ENABLED=true`
+  - `AUTO_REPLY_COMMENTS_ENABLED=true`
+  - `AUTO_HIDE_PHONE_COMMENTS_ENABLED=true`
+- Runtime Settings now reads those flags from Cloudflare Worker bindings and shows all three as `live-write đang bật`.
 
 ## Current Verification Notes
 

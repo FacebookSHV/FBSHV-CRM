@@ -3,6 +3,7 @@ import { getAiConfig } from "@/lib/ai/provider";
 import { getEcommerceProvider } from "@/lib/ecommerce/provider";
 import { getFacebookRuntimeConfigAsync } from "@/lib/facebook/env";
 import { getAdsReadiness } from "@/lib/facebook/ads";
+import { getFacebookAutomationConfigAsync } from "@/lib/facebook/automation";
 import { getBusinessSdkStatus } from "@/lib/facebook/business-sdk";
 import { getConversionsStatus } from "@/lib/meta/conversions";
 import { listAiProviderPublicStatus } from "./ai-keys";
@@ -31,6 +32,7 @@ export async function getRuntimeSettingsStatus() {
   const ecommerce = getEcommerceProvider();
   const aiConfig = getAiConfig();
   const activeAiProvider = ai.keys.find((key) => key.status === "valid")?.provider ?? ai.keys[0]?.provider ?? aiConfig.provider;
+  const automation = await getFacebookAutomationConfigAsync();
 
   return {
     facebook: {
@@ -71,6 +73,11 @@ export async function getRuntimeSettingsStatus() {
       plannerReference: "Postiz/Mixpost-inspired",
       inboxReference: "Chatwoot-inspired",
       integratedInCrm: true
+    },
+    automation: {
+      messageReplyEnabled: automation.messageReplyEnabled,
+      commentReplyEnabled: automation.commentReplyEnabled,
+      phoneHideEnabled: automation.phoneHideEnabled
     },
     webhook: {
       verifyTokenConfigured: present(process.env.META_VERIFY_TOKEN),

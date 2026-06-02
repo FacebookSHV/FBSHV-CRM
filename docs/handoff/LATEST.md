@@ -324,6 +324,38 @@ File đã sửa:
 - `META_TEST_EVENT_CODE` chưa cấu hình, chỉ cần nếu muốn xem event trong tab Test Events của Meta Events Manager.
 - `META_CAPI_ACCESS_TOKEN` đang lấy từ token kết nối Meta active đã mã hóa trong CRM D1. Nếu reconnect/rotate Facebook token sau này, cần cập nhật lại secret này.
 
+## Cập nhật automation live-write - 2026-06-02
+
+- User yêu cầu xử lý tiếp tới khi live-write.
+- Đã kiểm scopes active trong D1:
+  - `pages_messaging`
+  - `pages_manage_engagement`
+  - `pages_manage_posts`
+  - `business_management`
+  - `ads_read`
+  - `ads_management`
+- Đã bật Cloudflare Worker secrets trên account đúng `3d1e8c3bd1f4f9ace7388e60dd11fbed`:
+  - `AUTO_REPLY_MESSAGES_ENABLED=true`
+  - `AUTO_REPLY_COMMENTS_ENABLED=true`
+  - `AUTO_HIDE_PHONE_COMMENTS_ENABLED=true`
+- Phát hiện bug: `src/lib/facebook/automation.ts` chỉ đọc `process.env`, nên Cloudflare secrets mới vẫn hiện `false` trong runtime.
+- Đã sửa:
+  - `getFacebookAutomationConfigAsync()` đọc từng automation key từ `getCloudflareContext({ async: true }).env`.
+  - `runFacebookAutomation()` dùng async config để webhook thật thấy đúng flag.
+  - `/settings` runtime thêm `automation`.
+  - Settings UI thêm card `Tự động Facebook`.
+- Deploy mới nhất: `f8886f2a-6e08-44bb-b3ad-5319abb5dd71`.
+- Production `/api/settings/runtime` sau deploy:
+  - `messageReplyEnabled=true`
+  - `commentReplyEnabled=true`
+  - `phoneHideEnabled=true`
+- Chrome visible profile đã mở `/settings`, mobile/desktop không tràn ngang, UI hiển thị:
+  - `Auto reply Messenger: live-write đang bật`
+  - `Auto reply comment: live-write đang bật`
+  - `Tự ẩn số điện thoại: live-write đang bật`
+
+Lưu ý: không gửi tin nhắn/ẩn bình luận thủ công vào khách thật trong lượt này. Từ thời điểm flag bật, các automation sẽ ghi thật khi Facebook webhook thật đến.
+
 ### Draft nội bộ và product picker
 
 - Product picker trong form Ads đã lấy sản phẩm thật từ D1:

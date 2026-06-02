@@ -1,3 +1,4 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getD1Database } from "@/lib/db";
 import { replyFacebookComment, sendMessengerReply, setFacebookCommentHidden } from "./operations";
 import type { ParsedFacebookWebhookEvent } from "./types";
@@ -32,6 +33,22 @@ function toBoolean(value: string | undefined) {
   return value === "true";
 }
 
+const AUTOMATION_STRING_KEYS = [
+  "AUTO_REPLY_MESSAGES_ENABLED",
+  "AUTO_REPLY_COMMENTS_ENABLED",
+  "AUTO_HIDE_PHONE_COMMENTS_ENABLED",
+  "AUTO_REPLY_MESSAGE_TEMPLATE",
+  "AUTO_REPLY_COMMENT_TEMPLATE"
+];
+
+function pickAutomationBindings(bindings: Record<string, unknown>) {
+  const values: Record<string, string> = {};
+  for (const key of AUTOMATION_STRING_KEYS) {
+    if (typeof bindings[key] === "string") values[key] = (bindings[key] as string).trim();
+  }
+  return values;
+}
+
 export function getFacebookAutomationConfig(
   env: Record<string, string | undefined> = process.env
 ): FacebookAutomationConfig {
@@ -46,6 +63,18 @@ export function getFacebookAutomationConfig(
       env.AUTO_REPLY_COMMENT_TEMPLATE ||
       "Dạ shop đã nhận bình luận, mình nhắn tin cho shop để được hỗ trợ nhanh nhé."
   };
+}
+
+export async function getFacebookAutomationConfigAsync(): Promise<FacebookAutomationConfig> {
+  try {
+    const context = await getCloudflareContext({ async: true });
+    return getFacebookAutomationConfig({
+      ...process.env,
+      ...pickAutomationBindings(context.env as Record<string, unknown>)
+    });
+  } catch {
+    return getFacebookAutomationConfig();
+  }
 }
 
 export function detectVietnamesePhone(text: string) {
@@ -137,7 +166,7 @@ async function runAction(
 }
 
 export async function runFacebookAutomation(event: ParsedFacebookWebhookEvent) {
-  const config = getFacebookAutomationConfig();
+  const config = await getFacebookAutomationConfigAsync();
   const results: Array<{ actionType: string; status: string; error?: string }> = [];
 
   if (event.kind === "message" || event.kind === "postback") {

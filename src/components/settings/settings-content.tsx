@@ -32,6 +32,7 @@ type RuntimeStatus = {
     mode: string;
   };
   socialUx: { plannerReference: string; inboxReference: string; integratedInCrm: boolean };
+  automation: { messageReplyEnabled: boolean; commentReplyEnabled: boolean; phoneHideEnabled: boolean };
   webhook: { verifyTokenConfigured: boolean; facebookCallback: string; facebookWebhook: string };
 };
 
@@ -205,6 +206,16 @@ export function SettingsContent() {
                 "Lịch nội dung: đã đưa về luồng CRM theo mẫu Postiz/Mixpost",
                 "Inbox CSKH: đã đưa về luồng CRM theo mẫu Chatwoot",
                 "Không nhúng app ngoài, chỉ tích hợp capability vào CRM"
+              ]}
+            />
+            <StatusCard
+              title="Tự động Facebook"
+              icon={<PlugZap />}
+              ok={status.automation.messageReplyEnabled && status.automation.commentReplyEnabled && status.automation.phoneHideEnabled}
+              lines={[
+                `Auto reply Messenger: ${status.automation.messageReplyEnabled ? "live-write đang bật" : "đang tắt"}`,
+                `Auto reply comment: ${status.automation.commentReplyEnabled ? "live-write đang bật" : "đang tắt"}`,
+                `Tự ẩn số điện thoại: ${status.automation.phoneHideEnabled ? "live-write đang bật" : "đang tắt"}`
               ]}
             />
             <StatusCard
