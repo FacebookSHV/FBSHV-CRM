@@ -1,4 +1,4 @@
-import { getCloudflareContext } from "@opennextjs/cloudflare";
+﻿import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getD1Database } from "@/lib/db";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
 import { getFacebookRuntimeConfigAsync } from "@/lib/facebook/env";
@@ -56,6 +56,15 @@ export async function getConversionsStatus() {
     testEventCodeConfigured: !missingSecret(runtime.testEventCode),
     provider: "Meta Pixel + CAPI",
     mode: configured ? "ready" : "needs_config"
+  };
+}
+
+export async function getPublicPixelConfig() {
+  const runtime = await getConversionRuntime();
+  const pixelConfigured = !missingSecret(runtime.pixelId);
+  return {
+    configured: pixelConfigured,
+    pixelId: pixelConfigured ? runtime.pixelId ?? null : null
   };
 }
 
@@ -129,7 +138,7 @@ export async function sendMetaConversionEvent(input: ConversionEventInput) {
       eventName: input.eventName,
       eventSourceUrl: input.eventSourceUrl,
       status: "config_missing",
-      error: "Thiếu Pixel ID hoặc CAPI access token."
+      error: "Thi?u Pixel ID ho?c CAPI access token."
     });
     throw new Error("META_CAPI_CONFIG_MISSING: Cần cấu hình META_PIXEL_ID và META_CAPI_ACCESS_TOKEN.");
   }
@@ -167,7 +176,7 @@ export async function sendMetaConversionEvent(input: ConversionEventInput) {
   });
   const metaPayload = (await response.json().catch(() => ({}))) as { events_received?: number; messages?: string[]; error?: { message?: string; type?: string; code?: number } };
   if (!response.ok || metaPayload.error) {
-    const error = sanitizeError(metaPayload.error?.message || "Meta CAPI trả lỗi.");
+    const error = sanitizeError(metaPayload.error?.message || "Meta CAPI tr? l?i.");
     await logConversionEvent({
       eventId,
       eventName: input.eventName,

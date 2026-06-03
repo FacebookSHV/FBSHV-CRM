@@ -7,6 +7,7 @@ import {
   Gauge,
   History,
   Inbox,
+  LayoutTemplate,
   Megaphone,
   SearchCheck,
   Settings,
@@ -28,6 +29,7 @@ export const navItems = [
   { href: "/ads", label: "Facebook Ads", icon: Megaphone },
   { href: "/automation", label: "Automation", icon: Workflow },
   { href: "/ai-assistant", label: "AI Assistant", icon: Bot },
+  { href: "/landing-pages", label: "Landing Page", icon: LayoutTemplate },
   { href: "/reports", label: "Báo cáo", icon: BarChart3 },
   { href: "/settings", label: "Cài đặt", icon: Settings },
   { href: "/audit-logs", label: "Audit Log", icon: History }
@@ -44,11 +46,11 @@ export const navGroups = [
   },
   {
     label: "Tăng trưởng",
-    items: [navItems[8], navItems[9], navItems[10], navItems[11]]
+    items: [navItems[8], navItems[9], navItems[10], navItems[11], navItems[12]]
   },
   {
     label: "Hệ thống",
-    items: [navItems[12], navItems[13]]
+    items: [navItems[13], navItems[14]]
   }
 ] as const;
 

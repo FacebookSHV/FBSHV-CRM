@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
 import { Menu } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { MobileNav } from "./mobile-nav";
 import { Sidebar } from "./sidebar";
@@ -11,8 +12,13 @@ type AppShellProps = {
 };
 
 export function AppShell({ children, environmentLabel = "Môi trường real" }: AppShellProps) {
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const needsAttention = environmentLabel.toLowerCase().includes("chưa");
+
+  if (pathname.startsWith("/lp/")) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900">

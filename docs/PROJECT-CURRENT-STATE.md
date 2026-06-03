@@ -1,6 +1,6 @@
 # FBSHV CRM - Project Current State
 
-Last updated: 2026-06-02
+Last updated: 2026-06-03
 
 ## Production
 
@@ -9,7 +9,7 @@ Last updated: 2026-06-02
 - Worker: `fbshv-crm`.
 - D1: `fbshv_crm_db`.
 - R2: `fbshv-crm-assets`.
-- Latest deploy verified in this run: `126be1b6-2178-4b08-9457-c8dbb20dbf8c`.
+- Latest deploy verified in this run: `7369cc9b-6ca0-40cb-b598-8387b797492a`.
 
 ## Current Verified Capabilities
 
@@ -25,6 +25,12 @@ Last updated: 2026-06-02
 - Inbox now uses a real product picker from the CRM product cache when creating ecommerce orders from a Facebook conversation.
 - Settings shows real runtime status for Meta, Ecommerce, Cloudflare, Ads, Webhook, AI, Meta SDK status, Pixel + CAPI status, and social UX integration.
 - Facebook automation live-write is enabled for Messenger auto reply, comment auto reply, and phone-number comment hiding.
+- Landing Page module is live:
+  - Admin route `/landing-pages` creates mobile-first landing pages from synced real products only.
+  - Public route `/lp/[slug]` renders outside the CRM shell for ad traffic.
+  - D1 tables: `landing_pages`, `landing_page_variants`, `landing_page_events`.
+  - Browser Pixel and server CAPI use the same `event_id` for Meta dedup when `META_PIXEL_ID` and `META_CAPI_ACCESS_TOKEN` are configured.
+  - Production test created and published slug `1-bo-cs-300w-k268-sales-fast-9d322a` from SKU `1_BO_CS_300W_K268`; D1 recorded 18 events, 1 lead, and 2 CAPI sent events.
 - UI shell now separates mobile from tablet/PC:
   - Mobile uses compact page headers, bottom navigation, and mobile-only dashboard work actions.
   - Tablet/PC uses the fixed left operator sidebar, grouped navigation, wider workspace headers, and desktop dashboard panels.
@@ -40,6 +46,12 @@ Last updated: 2026-06-02
   - Dedup key: unique `event_id`
   - Missing config is logged as `config_missing`, not faked as success.
   - After configuring Cloudflare secrets, production live-send returned `eventsReceived=1` and D1 logged `status=sent`.
+- Added landing page builder inspired by GitHub landing-page references, implemented natively in FBSHV CRM:
+  - `GET/POST /api/landing-pages`
+  - `PATCH /api/landing-pages/:id`
+  - `POST /api/landing-pages/events`
+  - `GET /api/meta/pixel-config`
+  - Public landing pages record PageView, ViewContent, Lead, and Contact.
 
 ## Current External Config
 
@@ -71,13 +83,23 @@ Last updated: 2026-06-02
   - `/content-planner`
   - `/inbox`
   - `/settings`
+  - `/landing-pages`
+  - `/lp/1-bo-cs-300w-k268-sales-fast-9d322a`
   - `POST /api/meta/capi/events`
+- Production landing page actions verified:
+  - Created a draft landing page from synced product SKU `1_BO_CS_300W_K268`.
+  - Published the landing page.
+  - Opened public URL and confirmed CRM shell is not rendered on `/lp/...`.
+  - Submitted lead test; UI returned Pixel/CAPI success message.
+  - Refreshed public URL and confirmed the page persisted.
+  - D1 remote confirmed `status=published`, `leads=1`, `capi_sent=2`.
 - Responsive checks this run:
   - `/dashboard`: mobile, tablet, desktop, no horizontal overflow; mobile and tablet/PC render different workspace layouts.
   - `/products`: mobile, tablet, desktop, no horizontal overflow; page header now uses separated mobile/tablet-PC layout.
   - `/content-planner`: mobile, tablet, desktop, no horizontal overflow.
   - `/settings`: mobile, tablet, desktop, no horizontal overflow after fixing tablet card columns.
   - `/ads`: mobile, tablet, desktop, no horizontal overflow.
+  - `/lp/1-bo-cs-300w-k268-sales-fast-9d322a`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow.
 
 ## Do Not Commit
 
@@ -92,3 +114,4 @@ Last updated: 2026-06-02
 
 - `META_TEST_EVENT_CODE` is optional and not configured. Add it later only if Events Manager test-event diagnostics are needed.
 - The CAPI token source is the current active encrypted Meta connection token. If the Facebook connection is rotated or expires, refresh Facebook connection and update `META_CAPI_ACCESS_TOKEN` accordingly.
+- Landing Page currently has one active variant per page. The schema supports variants, but full A/B traffic splitting and AI copy generation UI are still future work.
