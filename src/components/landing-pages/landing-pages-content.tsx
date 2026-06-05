@@ -24,6 +24,12 @@ function imageStatusLabel(page: LandingPage) {
   return "Chưa có ảnh AI";
 }
 
+function copyStatusLabel(page: LandingPage) {
+  if (page.aiMode === "ai") return "Copy AI";
+  if (page.aiMode === "template") return "Copy template";
+  return "Copy đã lưu";
+}
+
 export function LandingPagesContent({
   initialPages,
   templates,
@@ -71,7 +77,12 @@ export function LandingPagesContent({
         : payload.data.imageJobError
           ? ` Chưa xếp được job ảnh AI: ${payload.data.imageJobError}`
           : "";
-      showResult(`Đã tạo landing page nháp: ${payload.data.title}.${imageMessage}`);
+      const copyMessage = payload.data.aiMode === "ai"
+        ? ` Copy đã tạo bằng AI thật. ${payload.data.aiNotice ?? ""}`
+        : payload.data.aiNotice
+          ? ` Copy dùng template fallback: ${payload.data.aiNotice}`
+          : "";
+      showResult(`Đã tạo landing page nháp: ${payload.data.title}.${copyMessage}${imageMessage}`);
     } else {
       showResult(payload && !payload.success ? payload.error ?? "Tạo landing page lỗi." : "Tạo landing page lỗi.");
     }
@@ -190,6 +201,9 @@ export function LandingPagesContent({
                       </StatusPill>
                       <StatusPill tone={page.creativeImages.length > 0 ? "success" : page.imageJobError ? "danger" : "info"}>
                         {imageStatusLabel(page)}
+                      </StatusPill>
+                      <StatusPill tone={page.aiMode === "ai" ? "success" : "neutral"}>
+                        {copyStatusLabel(page)}
                       </StatusPill>
                     </div>
                     <p className="mt-1 break-all text-xs text-slate-500">{page.publicUrl}</p>

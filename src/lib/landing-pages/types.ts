@@ -52,6 +52,8 @@ export type LandingPage = {
   creativeImages: string[];
   imageJobQueued?: boolean;
   imageJobError?: string | null;
+  aiMode?: "ai" | "template";
+  aiNotice?: string | null;
   publicUrl: string;
   createdAt: string;
   updatedAt: string;

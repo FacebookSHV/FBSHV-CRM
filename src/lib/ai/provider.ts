@@ -198,7 +198,7 @@ async function callGemini(config: AiConfig, prompt: string) {
     headers: { "content-type": "application/json", "x-goog-api-key": config.apiKey! },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 700 }
+      generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
     })
   }).catch((error) => {
     throw new AiProviderError("network_error", error instanceof Error ? error.message : "Không kết nối được Gemini API.");

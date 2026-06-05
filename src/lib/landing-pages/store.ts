@@ -3,7 +3,7 @@ import { readCachedProductBySku } from "@/lib/ecommerce/cache";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
 import { createImageflowJob } from "@/lib/imageflow/store";
 import { sendMetaConversionEvent } from "@/lib/meta/conversions";
-import { buildLandingContent, landingTemplates } from "./templates";
+import { buildLandingContent, buildLandingContentWithAi, landingTemplates } from "./templates";
 import type { LandingPage, LandingPageStatus, LandingTemplateId, LandingVariant } from "./types";
 
 type LandingPageRow = {
@@ -205,7 +205,8 @@ export async function createLandingPage(input: { productSku: string; templateId:
   const id = crypto.randomUUID();
   const variantId = crypto.randomUUID();
   const now = nowIso();
-  const content = buildLandingContent(product, input.templateId);
+  const generated = await buildLandingContentWithAi(product, input.templateId);
+  const content = generated.content;
   const title = input.title?.trim() || content.seo.title;
   const slug = `${slugify(product.name)}-${input.templateId.replaceAll("_", "-")}`.slice(0, 90);
 
@@ -258,7 +259,7 @@ export async function createLandingPage(input: { productSku: string; templateId:
 
   const pages = await listLandingPages();
   const page = pages.find((item) => item.id === id)!;
-  return { ...page, imageJobQueued, imageJobError };
+  return { ...page, imageJobQueued, imageJobError, aiMode: generated.aiMode, aiNotice: generated.aiNotice };
 }
 
 export async function updateLandingPageStatus(id: string, status: LandingPageStatus) {

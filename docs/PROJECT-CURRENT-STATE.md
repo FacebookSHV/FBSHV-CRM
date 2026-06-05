@@ -9,7 +9,7 @@ Last updated: 2026-06-05
 - Worker: `fbshv-crm`.
 - D1: `fbshv_crm_db`.
 - R2: `fbshv-crm-assets`.
-- Latest deploy verified in this run: `b74936ee-576e-42e5-a027-36e3166e0949`.
+- Latest deploy verified in this run: `c0f19549-536d-49c8-a591-a23b1256fe11`.
 
 ## Current Verified Capabilities
 
@@ -31,6 +31,7 @@ Last updated: 2026-06-05
   - Admin route `/landing-pages` now has an ImageFlow toggle when creating a landing page. When enabled, CRM creates a `landing_page` ImageFlow job at 4:5 from real Product Core `images[]` and `promptAssets`.
   - Public route `/lp/[slug]` renders outside the CRM shell for ad traffic.
   - Public route `/lp/[slug]` prioritizes completed ImageFlow R2 assets for the hero and gallery, then falls back to Product Core images if no creative assets exist.
+  - Public route `/lp/[slug]` now uses separate mobile and tablet/PC layout branches. Mobile follows a commerce landing pattern inspired by Shopee/TikTok style: shop header, trust bar, split hero, price card, product bullets, and sticky CTA.
   - D1 tables: `landing_pages`, `landing_page_variants`, `landing_page_events`.
   - Browser Pixel and server CAPI use the same `event_id` for Meta dedup when `META_PIXEL_ID` and `META_CAPI_ACCESS_TOKEN` are configured.
   - Production test created and published slug `1-bo-cs-300w-k268-sales-fast-9d322a` from SKU `1_BO_CS_300W_K268`; D1 recorded 18 events, 1 lead, and 2 CAPI sent events.
@@ -130,6 +131,8 @@ Last updated: 2026-06-05
   - D1 remote confirmed `status=published`, `leads=1`, `capi_sent=2`.
   - After redesign deploy `b74936ee-576e-42e5-a027-36e3166e0949`, created and published landing page `1-bo-cs-300w-k268-sales-fast-7ef131` from the production UI with the ImageFlow toggle enabled.
   - Local bridge completed ImageFlow job `1341f7bc-1b3e-418e-bc53-8e93c764201f` and uploaded 5 R2 JPEG assets. Public page reload on mobile confirmed hero image source `/api/imageflow/assets/b6a2eda3-76e0-4884-b053-da30ad80cc78`.
+  - After AI copy + mobile commerce deploy `c0f19549-536d-49c8-a591-a23b1256fe11`, production UI created and published slug `1-bo-cs-300w-k268-sales-fast-35f1ff` from SKU `1_BO_CS_300W_K268`; badge showed `Copy AI` at creation time.
+  - Local bridge completed ImageFlow job `a7d94787-6d24-40bc-a89f-2e93f8ea37f4` and uploaded 5 R2 JPEG assets for slug `1-bo-cs-300w-k268-sales-fast-35f1ff`.
 - Responsive checks this run:
   - `/dashboard`: mobile, tablet, desktop, no horizontal overflow; mobile and tablet/PC render different workspace layouts.
   - `/products`: mobile, tablet, desktop, no horizontal overflow; page header now uses separated mobile/tablet-PC layout.
@@ -138,6 +141,7 @@ Last updated: 2026-06-05
   - `/ads`: mobile, tablet, desktop, no horizontal overflow.
   - `/lp/1-bo-cs-300w-k268-sales-fast-9d322a`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow.
   - `/lp/1-bo-cs-300w-k268-sales-fast-7ef131`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow; 5 ImageFlow images render; lead form and CTA visible.
+  - `/lp/1-bo-cs-300w-k268-sales-fast-35f1ff`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow after splitting mobile and tablet/PC layouts; ImageFlow assets render; AI H1 read back as `Kiểm Soát Nguồn Điện 300W Mạnh Mẽ: An Toàn, Hiệu Quả Cho Mọi Dự Án`.
 
 ## Do Not Commit
 
@@ -154,4 +158,4 @@ Last updated: 2026-06-05
 - The CAPI token source is the current active encrypted Meta connection token. If the Facebook connection is rotated or expires, refresh Facebook connection and update `META_CAPI_ACCESS_TOKEN` accordingly.
 - Landing Page currently has one active variant per page. The schema supports variants, but full A/B traffic splitting and AI copy generation UI are still future work.
 - ImageFlow local bridge is production-verified for CRM upload. If a future ImageFlow local queue is busy, CRM jobs should stay `needs_user` with the sanitized queue reason and be retried after the local queue is idle.
-- Latest FBSHV deploy: Cloudflare Worker version `b74936ee-576e-42e5-a027-36e3166e0949`.
+- Latest FBSHV deploy: Cloudflare Worker version `c0f19549-536d-49c8-a591-a23b1256fe11`.

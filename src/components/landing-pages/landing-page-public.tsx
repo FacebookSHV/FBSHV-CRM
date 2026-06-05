@@ -1,6 +1,24 @@
 "use client";
 
-import { CheckCircle2, Image as ImageIcon, MessageCircle, Phone, Send, ShieldCheck, ShoppingCart, Sparkles, Star, Wrench } from "lucide-react";
+import {
+  BadgePercent,
+  CheckCircle2,
+  ChevronRight,
+  Image as ImageIcon,
+  Menu,
+  MessageCircle,
+  PackageCheck,
+  Phone,
+  Search,
+  Send,
+  ShieldCheck,
+  ShoppingBag,
+  ShoppingCart,
+  Sparkles,
+  Star,
+  Truck,
+  Wrench
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { LandingPage } from "@/lib/landing-pages/types";
 import { formatMoney } from "@/lib/money";
@@ -50,6 +68,14 @@ function stockText(page: LandingPage) {
   return `Còn sẵn ${stock}`;
 }
 
+function discountText(page: LandingPage) {
+  const product = page.product;
+  const current = Number(product?.currentPrice || product?.salePrice || 0);
+  const original = Number(product?.originalPrice || 0);
+  if (!current || !original || original <= current) return "Giá tốt hôm nay";
+  return `Tiết kiệm ${Math.round(((original - current) / original) * 100)}%`;
+}
+
 function loadMetaPixel(pixelId: string) {
   const win = window as FbqWindow;
   if (win.fbq?.loaded) {
@@ -89,11 +115,12 @@ export function LandingPagePublic({ page }: { page: LandingPage }) {
   const [leadName, setLeadName] = useState("");
   const [leadPhone, setLeadPhone] = useState("");
   const [leadNote, setLeadNote] = useState("");
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [status, setStatus] = useState("Nhập số điện thoại để shop tư vấn và kiểm tồn.");
   const [submitting, setSubmitting] = useState(false);
   const product = page.product;
   const images = productImages(page);
-  const heroImage = images[0] ?? "";
+  const heroImage = images[selectedImageIndex] ?? images[0] ?? "";
   const price = productPrice(page);
   const contentIds = useMemo(() => (product?.sku ? [product.sku] : []), [product?.sku]);
   const aiImageCount = page.creativeImages.length;
@@ -177,120 +204,285 @@ export function LandingPagePublic({ page }: { page: LandingPage }) {
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f7fb] pb-28 text-slate-950">
-      <header className="fixed inset-x-0 top-0 z-30 border-b border-white/15 bg-slate-950/80 text-white backdrop-blur-xl">
+    <main className="min-h-screen bg-[#f4f6f8] pb-24 text-slate-950">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <div className="text-sm font-black uppercase tracking-wide">Shop Huy Vân</div>
-            <div className="text-xs text-white/70">Gia dụng điện nước chính hãng</div>
+          <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700" aria-label="Mở menu">
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <div className="min-w-0 flex-1 text-center sm:text-left">
+            <div className="text-sm font-black uppercase tracking-wide text-brand-700">Shop Huy Vân</div>
+            <div className="truncate text-xs font-semibold text-slate-500">Điện nước gia dụng chính hãng</div>
           </div>
-          <a href="#lead-form" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-black text-slate-950">
-            <MessageCircle className="h-4 w-4" aria-hidden="true" />
-            Tư vấn ngay
-          </a>
+          <div className="flex items-center gap-2">
+            <a href="#lead-form" className="hidden min-h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-black text-white sm:inline-flex">
+              <MessageCircle className="h-4 w-4" aria-hidden="true" />
+              Tư vấn ngay
+            </a>
+            <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700" aria-label="Tìm kiếm">
+              <Search className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <a href="#lead-form" className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700" aria-label="Giỏ tư vấn">
+              <ShoppingBag className="h-5 w-5" aria-hidden="true" />
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-600 px-1 text-[11px] font-black text-white">1</span>
+            </a>
+          </div>
+        </div>
+        <div className="bg-brand-700 text-white">
+          <div className="mx-auto grid max-w-6xl grid-cols-3 divide-x divide-white/25 px-2 py-2 text-center text-[11px] font-black leading-tight sm:text-sm">
+            <div className="flex items-center justify-center gap-1 px-1">
+              <Truck className="h-4 w-4 flex-none" aria-hidden="true" />
+              <span>Ship nhanh</span>
+            </div>
+            <div className="flex items-center justify-center gap-1 px-1">
+              <ShieldCheck className="h-4 w-4 flex-none" aria-hidden="true" />
+              <span>Hàng chuẩn</span>
+            </div>
+            <div className="flex items-center justify-center gap-1 px-1">
+              <MessageCircle className="h-4 w-4 flex-none" aria-hidden="true" />
+              <span>Tư vấn lắp đặt</span>
+            </div>
+          </div>
         </div>
       </header>
 
-      <section className="relative isolate min-h-[92svh] overflow-hidden bg-slate-950 pt-16 text-white">
-        {heroImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={heroImage} alt={product?.name ?? page.title} className="absolute inset-0 -z-20 h-full w-full object-cover" />
-        ) : null}
-        <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(2,6,23,0.92),rgba(2,6,23,0.62),rgba(2,6,23,0.18))]" />
-        <div className="mx-auto grid min-h-[calc(92svh-4rem)] max-w-6xl content-end gap-8 px-4 pb-8 pt-10 md:grid-cols-[1fr_360px] md:items-end md:pb-12">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-black ring-1 ring-white/20">
-              <Sparkles className="h-4 w-4 text-amber-300" aria-hidden="true" />
-              {aiImageCount > 0 ? `${aiImageCount} ảnh AI từ sản phẩm thật` : "Sẵn sàng tạo ảnh AI 4:5"}
+      <section className="mx-auto max-w-md px-4 py-4 lg:hidden">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="grid grid-cols-[minmax(0,1fr)_132px] gap-3 bg-[radial-gradient(circle_at_88%_22%,#dbeafe_0,#ffffff_38%,#f8fafc_100%)] p-4">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-brand-700 shadow-sm ring-1 ring-slate-200">
+                <Sparkles className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" />
+                {aiImageCount > 0 ? `${aiImageCount} ảnh AI` : "Ảnh thật"}
+              </div>
+              <h1 className="mt-3 break-words text-[25px] font-black leading-[1.08] text-slate-950">
+                {page.hero.headline}
+              </h1>
+              <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">
+                {page.hero.subheadline}
+              </p>
             </div>
-            <h1 className="mt-5 max-w-3xl text-4xl font-black leading-[1.04] text-white sm:text-5xl lg:text-6xl">
-              {page.hero.headline}
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-white/80 sm:text-lg">
-              {page.hero.subheadline}
+            <div className="relative aspect-[4/5] min-w-0 overflow-hidden rounded-2xl bg-white/90">
+              {heroImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={heroImage} alt={product?.name ?? page.title} className="h-full w-full object-contain" />
+              ) : null}
+            </div>
+          </div>
+          {images.length > 1 ? (
+            <div className="flex gap-2 overflow-x-auto border-t border-slate-100 p-3">
+              {images.slice(0, 6).map((image, index) => (
+                <button
+                  key={image}
+                  type="button"
+                  onClick={() => setSelectedImageIndex(index)}
+                  className={`h-14 w-14 flex-none overflow-hidden rounded-xl border bg-white ${selectedImageIndex === index ? "border-rose-500 ring-2 ring-rose-100" : "border-slate-200"}`}
+                  aria-label={`Xem ảnh ${index + 1}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={image} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <article className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs font-black text-rose-700">
+              <BadgePercent className="h-4 w-4" aria-hidden="true" />
+              {discountText(page)}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+              <PackageCheck className="h-4 w-4" aria-hidden="true" />
+              {stockText(page)}
+            </span>
+          </div>
+          <h2 className="mt-4 text-xl font-black leading-tight text-slate-950">
+            {product?.name ?? page.title}
+          </h2>
+          <div className="mt-3 rounded-2xl bg-gradient-to-r from-rose-50 via-white to-sky-50 p-4">
+            <div className="text-xs font-black uppercase text-slate-500">Giá bán hôm nay</div>
+            <div className="mt-1 text-3xl font-black tabular-nums text-rose-600">{price || "Nhắn shop kiểm giá"}</div>
+            <div className="mt-2 text-xs font-bold text-slate-600">SKU {product?.sku ?? "đang cập nhật"}</div>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {page.hero.bullets.slice(0, 4).map((bullet) => (
+              <div key={bullet} className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-brand-600" aria-hidden="true" />
+                <span>{bullet}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <a href="#lead-form" className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-brand-700 px-3 text-sm font-black text-white shadow-lg shadow-brand-900/15">
+              <ShoppingCart className="h-5 w-5" aria-hidden="true" />
+              {page.hero.primaryCta}
+            </a>
+            <a href="#lead-form" className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-rose-600 px-3 text-sm font-black text-white">
+              <MessageCircle className="h-5 w-5" aria-hidden="true" />
+              Tư vấn
+            </a>
+          </div>
+        </article>
+
+        <section id="proof" className="mt-4 grid grid-cols-3 gap-2">
+          {page.sections.trustBadges.slice(0, 3).map((badge) => (
+            <div key={badge} className="flex min-h-20 flex-col justify-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-3 text-center shadow-sm">
+              <ShieldCheck className="mx-auto h-5 w-5 text-brand-600" aria-hidden="true" />
+              <span className="text-[12px] font-black leading-snug text-slate-800">{badge}</span>
+            </div>
+          ))}
+        </section>
+      </section>
+
+      <section className="mx-auto hidden max-w-6xl gap-4 px-4 py-4 lg:grid lg:grid-cols-[minmax(0,1.04fr)_minmax(0,0.96fr)] lg:items-start lg:py-8">
+        <div className="lg:sticky lg:top-28">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="grid min-h-[420px] grid-cols-[minmax(0,1fr)_minmax(118px,42%)] items-center gap-2 overflow-hidden bg-[radial-gradient(circle_at_85%_25%,#dbeafe_0,#ffffff_34%,#f8fafc_100%)] p-4 sm:grid-cols-[0.9fr_1.1fr] sm:p-6">
+              <div className="min-w-0 self-center">
+                <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[11px] font-black text-brand-700 shadow-sm ring-1 ring-slate-200">
+                  <Sparkles className="h-4 w-4 text-amber-500" aria-hidden="true" />
+                  {aiImageCount > 0 ? `${aiImageCount} ảnh AI` : "Ảnh Product Core"}
+                </div>
+                <h1 className="mt-4 break-words text-[26px] font-black leading-[1.06] text-slate-950 sm:text-5xl">
+                  {page.hero.headline}
+                </h1>
+                <p className="mt-3 text-sm font-semibold leading-6 text-slate-600 sm:text-base">
+                  {page.hero.subheadline}
+                </p>
+                <div className="mt-4 hidden gap-2 sm:grid">
+                  {page.hero.bullets.slice(0, 3).map((bullet) => (
+                    <div key={bullet} className="flex items-start gap-2 text-sm font-bold text-slate-800">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-brand-600" aria-hidden="true" />
+                      <span>{bullet}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="relative aspect-[4/5] min-w-0 max-w-full overflow-hidden rounded-2xl bg-white/80">
+              {heroImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={heroImage} alt={product?.name ?? page.title} className="h-full w-full object-contain" />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm font-bold text-slate-500">Chưa có ảnh sản phẩm</div>
+              )}
+                <div className="absolute bottom-3 right-3 rounded-xl bg-white/95 px-3 py-2 text-right shadow-sm">
+                  <div className="text-[11px] font-black uppercase text-slate-500">Giá từ</div>
+                  <div className="text-lg font-black text-rose-600">{price || "Liên hệ"}</div>
+                </div>
+              </div>
+            </div>
+            {images.length > 1 ? (
+              <div className="flex gap-2 overflow-x-auto border-t border-slate-100 p-3">
+                {images.slice(0, 8).map((image, index) => (
+                  <button
+                    key={image}
+                    type="button"
+                    onClick={() => setSelectedImageIndex(index)}
+                    className={`h-16 w-16 flex-none overflow-hidden rounded-xl border bg-white ${selectedImageIndex === index ? "border-rose-500 ring-2 ring-rose-100" : "border-slate-200"}`}
+                    aria-label={`Xem ảnh ${index + 1}`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={image} alt="" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <div className="flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs font-black text-rose-700">
+                <BadgePercent className="h-4 w-4" aria-hidden="true" />
+                {discountText(page)}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+                <PackageCheck className="h-4 w-4" aria-hidden="true" />
+                {stockText(page)}
+              </span>
+            </div>
+            <h2 className="mt-4 text-xl font-black leading-tight text-slate-950 sm:text-2xl">
+              {product?.name ?? page.title}
+            </h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+              Nhắn shop để kiểm đúng mẫu, tồn kho và phương án lắp đặt trước khi chốt đơn.
             </p>
-            <div className="mt-5 grid gap-2">
+            <div className="mt-5 rounded-2xl bg-gradient-to-r from-rose-50 via-white to-sky-50 p-4">
+              <div className="text-xs font-black uppercase text-slate-500">Giá bán hôm nay</div>
+              <div className="mt-1 text-4xl font-black tabular-nums text-rose-600">{price || "Nhắn shop kiểm giá"}</div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-slate-600">
+                <span>SKU {product?.sku ?? "đang cập nhật"}</span>
+                <span>•</span>
+                <span>Dữ liệu lấy từ sản phẩm đã đồng bộ</span>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2">
               {page.hero.bullets.slice(0, 4).map((bullet) => (
-                <div key={bullet} className="flex items-start gap-2 text-sm font-bold text-white">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-300" aria-hidden="true" />
+                <div key={bullet} className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" aria-hidden="true" />
                   <span>{bullet}</span>
                 </div>
               ))}
             </div>
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <a href="#lead-form" className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-rose-600 px-6 text-base font-black text-white shadow-2xl shadow-rose-950/30">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <a href="#lead-form" className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-rose-600 px-6 text-base font-black text-white shadow-lg shadow-rose-900/15">
                 <ShoppingCart className="h-5 w-5" aria-hidden="true" />
                 {page.hero.primaryCta}
               </a>
-              <a href="#proof" className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/12 px-6 text-base font-black text-white backdrop-blur">
-                Xem lý do nên mua
+              <a href="#proof" className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 text-base font-black text-slate-950">
+                {page.hero.secondaryCta || "Xem lý do nên mua"}
+                <ChevronRight className="h-5 w-5" aria-hidden="true" />
               </a>
             </div>
-          </div>
+          </article>
 
-          <aside className="rounded-2xl border border-white/15 bg-white/95 p-4 text-slate-950 shadow-2xl backdrop-blur md:mb-2">
-            <div className="text-xs font-black uppercase text-slate-500">Ưu đãi hôm nay</div>
-            <div className="mt-2 text-lg font-black leading-snug">{product?.name ?? page.title}</div>
-            <div className="mt-3 flex items-end gap-2">
-              <div className="text-3xl font-black tabular-nums text-rose-600">{price || "Nhắn shop kiểm giá"}</div>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold">
-              <div className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700">{stockText(page)}</div>
-              <div className="rounded-lg bg-sky-50 px-3 py-2 text-sky-700">Giao nhanh nội thành</div>
-            </div>
-            <a href="#lead-form" className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-black text-white">
-              Giữ giá và tư vấn lắp đặt
-            </a>
-          </aside>
-        </div>
-      </section>
-
-      <section id="proof" className="border-y border-slate-200 bg-white">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-3 px-4 py-4 md:grid-cols-4">
-          {page.sections.trustBadges.slice(0, 4).map((badge) => (
-            <div key={badge} className="flex min-h-14 items-center gap-2 rounded-lg bg-slate-50 px-3 text-sm font-black text-slate-800">
-              <ShieldCheck className="h-5 w-5 flex-none text-brand-600" aria-hidden="true" />
-              <span>{badge}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-4 py-8">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-black text-slate-950">Ảnh sản phẩm dùng cho quảng cáo</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Ưu tiên ảnh AI 4:5 đã render từ ImageFlow; nếu chưa render xong, trang dùng ảnh thật từ Product Core.
-            </p>
-          </div>
-          <div className="hidden rounded-full bg-slate-900 px-3 py-1 text-xs font-black text-white sm:block">
-            {aiImageCount > 0 ? "AI creative live" : "Đang chờ AI creative"}
-          </div>
-        </div>
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          {images.slice(0, 4).map((image, index) => (
-            <figure key={image} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="aspect-[4/5] bg-slate-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image} alt={`${product?.name ?? page.title} ${index + 1}`} className="h-full w-full object-cover" />
+          <section id="proof" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {page.sections.trustBadges.slice(0, 4).map((badge) => (
+              <div key={badge} className="flex min-h-20 flex-col justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+                <ShieldCheck className="h-5 w-5 text-brand-600" aria-hidden="true" />
+                <span className="text-sm font-black leading-snug text-slate-800">{badge}</span>
               </div>
-              <figcaption className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600">
-                <ImageIcon className="h-4 w-4 text-brand-600" aria-hidden="true" />
-                Ảnh {index + 1}
-              </figcaption>
-            </figure>
-          ))}
+            ))}
+          </section>
+
+          <section className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <Truck className="h-5 w-5 text-sky-600" aria-hidden="true" />
+              <div className="mt-2 text-sm font-black">Giao nhanh</div>
+              <p className="mt-1 text-xs leading-5 text-slate-600">Shop xác nhận tồn và tư vấn phương án nhận hàng phù hợp.</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <ShieldCheck className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+              <div className="mt-2 text-sm font-black">Đúng mẫu</div>
+              <p className="mt-1 text-xs leading-5 text-slate-600">Dựa trên SKU và ảnh sản phẩm thật đã đồng bộ trong CRM.</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <MessageCircle className="h-5 w-5 text-rose-600" aria-hidden="true" />
+              <div className="mt-2 text-sm font-black">Tư vấn lắp đặt</div>
+              <p className="mt-1 text-xs leading-5 text-slate-600">Nhắn nhu cầu để shop kiểm mẫu, số lượng và khu vực giao.</p>
+            </div>
+          </section>
         </div>
       </section>
 
       {page.sections.benefits.length ? (
-        <section className="mx-auto max-w-6xl px-4 py-4">
+        <section className="mx-auto max-w-6xl px-4 py-5">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-black text-slate-950">Vì sao nên chọn sản phẩm này?</h2>
+              <p className="mt-1 text-sm text-slate-600">Lợi ích được viết từ thông tin sản phẩm thật và prompt AI.</p>
+            </div>
+            <span className="hidden rounded-full bg-slate-900 px-3 py-1 text-xs font-black text-white sm:inline-flex">
+              Copy AI
+            </span>
+          </div>
           <div className="grid gap-3 md:grid-cols-3">
             {page.sections.benefits.map((benefit) => (
               <article key={benefit.title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <Star className="h-6 w-6 text-amber-500" aria-hidden="true" />
-                <h2 className="mt-3 text-lg font-black text-slate-950">{benefit.title}</h2>
+                <h3 className="mt-3 text-lg font-black text-slate-950">{benefit.title}</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">{benefit.text}</p>
               </article>
             ))}
@@ -298,8 +490,31 @@ export function LandingPagePublic({ page }: { page: LandingPage }) {
         </section>
       ) : null}
 
+      {images.length > 1 ? (
+        <section className="mx-auto max-w-6xl px-4 py-5">
+          <div className="mb-4">
+            <h2 className="text-2xl font-black text-slate-950">Ảnh để xem trước khi mua</h2>
+            <p className="mt-1 text-sm text-slate-600">Ảnh AI 4:5 dùng cho quảng cáo và ảnh nguồn thật nằm chung một gallery.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {images.slice(0, 4).map((image, index) => (
+              <figure key={image} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="aspect-[4/5] bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={image} alt={`${product?.name ?? page.title} ${index + 1}`} className="h-full w-full object-contain" />
+                </div>
+                <figcaption className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600">
+                  <ImageIcon className="h-4 w-4 text-brand-600" aria-hidden="true" />
+                  Ảnh {index + 1}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {page.sections.steps.length ? (
-        <section className="mx-auto max-w-6xl px-4 py-6">
+        <section className="mx-auto max-w-6xl px-4 py-5">
           <div className="rounded-2xl bg-[#08111f] p-5 text-white md:p-8">
             <div className="flex items-center gap-3">
               <Wrench className="h-6 w-6 text-sky-300" aria-hidden="true" />
