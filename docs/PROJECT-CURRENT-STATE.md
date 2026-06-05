@@ -9,7 +9,7 @@ Last updated: 2026-06-05
 - Worker: `fbshv-crm`.
 - D1: `fbshv_crm_db`.
 - R2: `fbshv-crm-assets`.
-- Latest deploy verified in this run: `c0f19549-536d-49c8-a591-a23b1256fe11`.
+- Latest deploy verified in this run: `7f5d7762-a994-4bc4-b7b6-5df24ec9f7e3`.
 
 ## Current Verified Capabilities
 
@@ -32,6 +32,7 @@ Last updated: 2026-06-05
   - Public route `/lp/[slug]` renders outside the CRM shell for ad traffic.
   - Public route `/lp/[slug]` prioritizes completed ImageFlow R2 assets for the hero and gallery, then falls back to Product Core images if no creative assets exist.
   - Public route `/lp/[slug]` now uses separate mobile and tablet/PC layout branches. Mobile follows a commerce landing pattern inspired by Shopee/TikTok style: shop header, trust bar, split hero, price card, product bullets, and sticky CTA.
+  - Public landing page UI was refactored into separate component files so mobile and tablet/PC can be developed independently without the main public component approaching the 30KB file limit.
   - D1 tables: `landing_pages`, `landing_page_variants`, `landing_page_events`.
   - Browser Pixel and server CAPI use the same `event_id` for Meta dedup when `META_PIXEL_ID` and `META_CAPI_ACCESS_TOKEN` are configured.
   - Production test created and published slug `1-bo-cs-300w-k268-sales-fast-9d322a` from SKU `1_BO_CS_300W_K268`; D1 recorded 18 events, 1 lead, and 2 CAPI sent events.
@@ -142,6 +143,7 @@ Last updated: 2026-06-05
   - `/lp/1-bo-cs-300w-k268-sales-fast-9d322a`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow.
   - `/lp/1-bo-cs-300w-k268-sales-fast-7ef131`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow; 5 ImageFlow images render; lead form and CTA visible.
   - `/lp/1-bo-cs-300w-k268-sales-fast-35f1ff`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow after splitting mobile and tablet/PC layouts; ImageFlow assets render; AI H1 read back as `Kiểm Soát Nguồn Điện 300W Mạnh Mẽ: An Toàn, Hiệu Quả Cho Mọi Dự Án`.
+  - After refactor deploy `7f5d7762-a994-4bc4-b7b6-5df24ec9f7e3`, the same public landing page was rechecked at mobile/tablet/desktop and still had no horizontal overflow. Non-critical below-fold images now use lazy loading.
 
 ## Do Not Commit
 
@@ -158,4 +160,4 @@ Last updated: 2026-06-05
 - The CAPI token source is the current active encrypted Meta connection token. If the Facebook connection is rotated or expires, refresh Facebook connection and update `META_CAPI_ACCESS_TOKEN` accordingly.
 - Landing Page currently has one active variant per page. The schema supports variants, but full A/B traffic splitting and AI copy generation UI are still future work.
 - ImageFlow local bridge is production-verified for CRM upload. If a future ImageFlow local queue is busy, CRM jobs should stay `needs_user` with the sanitized queue reason and be retried after the local queue is idle.
-- Latest FBSHV deploy: Cloudflare Worker version `c0f19549-536d-49c8-a591-a23b1256fe11`.
+- Latest FBSHV deploy: Cloudflare Worker version `7f5d7762-a994-4bc4-b7b6-5df24ec9f7e3`.
