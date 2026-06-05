@@ -1,6 +1,7 @@
 import { getD1Database } from "@/lib/db";
 import { readCachedProductBySku } from "@/lib/ecommerce/cache";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
+import { createImageflowJob } from "@/lib/imageflow/store";
 import { sendMetaConversionEvent } from "@/lib/meta/conversions";
 import { buildLandingContent, landingTemplates } from "./templates";
 import type { LandingPage, LandingPageStatus, LandingTemplateId, LandingVariant } from "./types";
@@ -92,9 +93,35 @@ async function readDefaultVariant(landingPageId: string): Promise<LandingVariant
   };
 }
 
+async function readLandingCreativeImages(landingPageId: string, productSku: string) {
+  const db = await getD1Database();
+  if (!db) return [] as string[];
+  const rows = await db
+    .prepare(
+      `select a.public_url as public_url
+       from imageflow_jobs j
+       join imageflow_assets a on a.job_id = j.id and a.workspace_id = j.workspace_id
+       where j.workspace_id = ?
+         and j.status = 'completed'
+         and a.public_url is not null
+         and (j.post_id = ? or j.product_sku = ?)
+       order by
+         case when j.post_id = ? then 0 else 1 end,
+         j.updated_at desc,
+         a.asset_index asc
+       limit 8`
+    )
+    .bind(DEFAULT_WORKSPACE_ID, landingPageId, productSku, landingPageId)
+    .all<{ public_url: string }>();
+  return [...new Set((rows.results ?? []).map((row) => row.public_url).filter(Boolean))];
+}
+
 async function mapLandingPage(row: LandingPageRow): Promise<LandingPage> {
-  const product = await readCachedProductBySku(row.product_sku);
-  const variant = await readDefaultVariant(row.id);
+  const [product, variant, creativeImages] = await Promise.all([
+    readCachedProductBySku(row.product_sku),
+    readDefaultVariant(row.id),
+    readLandingCreativeImages(row.id, row.product_sku)
+  ]);
   const generated = product ? buildLandingContent(product, row.template_id) : null;
   return {
     id: row.id,
@@ -120,6 +147,7 @@ async function mapLandingPage(row: LandingPageRow): Promise<LandingPage> {
     seo: safeJson(row.seo_json, variant?.content.seo ?? generated?.seo ?? { title: row.title, description: row.title }),
     product,
     variant,
+    creativeImages,
     publicUrl: `${appBaseUrl()}/lp/${row.slug}`,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -166,7 +194,7 @@ export async function getLandingPageBySlug(slug: string) {
   return row ? mapLandingPage(row) : null;
 }
 
-export async function createLandingPage(input: { productSku: string; templateId: LandingTemplateId; title?: string }) {
+export async function createLandingPage(input: { productSku: string; templateId: LandingTemplateId; title?: string; createAiImages?: boolean }) {
   const db = await getD1Database();
   if (!db) throw new Error("BLOCKED_BY_MISSING_BINDING: Thiếu D1 binding để lưu landing page.");
   const product = await readCachedProductBySku(input.productSku);
@@ -200,8 +228,37 @@ export async function createLandingPage(input: { productSku: string; templateId:
     .bind(variantId, DEFAULT_WORKSPACE_ID, id, `${template.name} - Variant A`, input.templateId, stringify(content), now, now)
     .run();
 
+  let imageJobQueued = false;
+  let imageJobError: string | null = null;
+  if (input.createAiImages !== false) {
+    try {
+      // NEO: Landing page xếp job ImageFlow từ Product Core thật để hero/gallery có ảnh AI 4:5, không dùng ảnh giả.
+      await createImageflowJob({
+        postId: id,
+        productSku: product.sku,
+        title: `Landing AI - ${product.name}`,
+        targetFormat: "landing_page",
+        targetAspectRatio: "4:5",
+        outputWidth: 1080,
+        outputHeight: 1350,
+        requestedCount: 5,
+        promptJson: {
+          channel: "landing_page",
+          creativeGoal: "Tạo bộ ảnh bán hàng gia dụng dùng cho hero, gallery và quảng cáo Facebook.",
+          imageStyle: "ảnh sản phẩm rõ, sạch, ánh sáng thương mại, có bối cảnh sử dụng thực tế, không chữ nhỏ khó đọc",
+          requiredRatio: "4:5",
+          productSku: product.sku
+        }
+      });
+      imageJobQueued = true;
+    } catch (error) {
+      imageJobError = sanitizeError(error);
+    }
+  }
+
   const pages = await listLandingPages();
-  return pages.find((page) => page.id === id)!;
+  const page = pages.find((item) => item.id === id)!;
+  return { ...page, imageJobQueued, imageJobError };
 }
 
 export async function updateLandingPageStatus(id: string, status: LandingPageStatus) {

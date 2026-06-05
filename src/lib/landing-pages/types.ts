@@ -49,6 +49,9 @@ export type LandingPage = {
   seo: LandingSeo;
   product: ProductWithInventory | null;
   variant: LandingVariant | null;
+  creativeImages: string[];
+  imageJobQueued?: boolean;
+  imageJobError?: string | null;
   publicUrl: string;
   createdAt: string;
   updatedAt: string;

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const imageflowBaseUrl = (process.env.IMAGEFLOW_LOCAL_BASE_URL || "http://127.0.0.1:7096").replace(/\/$/, "");
@@ -164,6 +164,7 @@ function hasOtherActiveQueueItem(queue, sku) {
 }
 
 async function waitForFinalImages(queueId, requestedCount) {
+  const waitStartedAt = Date.now();
   const started = Date.now();
   let lastError = "";
   while (Date.now() - started < timeoutMs) {
@@ -178,7 +179,11 @@ async function waitForFinalImages(queueId, requestedCount) {
     const queue = await httpJson("/api/product-queue").catch(() => null);
     const item = queue ? (Array.isArray(queue.items) ? queue.items : []).find((x) => String(x.id) === String(queueId)) : null;
     const status = String(item?.status || "").toLowerCase();
-    const finalPaths = Array.isArray(result?.final_paths) ? result.final_paths.filter(Boolean) : [];
+    const finalPaths = [];
+    for (const filePath of Array.isArray(result?.final_paths) ? result.final_paths.filter(Boolean) : []) {
+      const info = await stat(filePath).catch(() => null);
+      if (info && info.mtimeMs >= waitStartedAt) finalPaths.push(filePath);
+    }
     if (finalPaths.length >= requestedCount) return finalPaths.slice(0, requestedCount);
     if (status === "done" && finalPaths.length > 0) return finalPaths.slice(0, requestedCount || finalPaths.length);
     const error = String(item?.error || "").trim();

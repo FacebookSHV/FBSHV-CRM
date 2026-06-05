@@ -17,6 +17,13 @@ function statusLabel(status: LandingPage["status"]) {
   return "Nháp";
 }
 
+function imageStatusLabel(page: LandingPage) {
+  if (page.creativeImages.length > 0) return `${page.creativeImages.length} ảnh AI`;
+  if (page.imageJobQueued) return "Đã xếp job ảnh AI";
+  if (page.imageJobError) return "Job ảnh cần kiểm tra";
+  return "Chưa có ảnh AI";
+}
+
 export function LandingPagesContent({
   initialPages,
   templates,
@@ -29,6 +36,7 @@ export function LandingPagesContent({
   const [pages, setPages] = useState(initialPages);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithInventory | null>(products[0] ?? null);
   const [templateId, setTemplateId] = useState<LandingTemplateId>("sales_fast");
+  const [createAiImages, setCreateAiImages] = useState(true);
   const [status, setStatus] = useState("Chọn sản phẩm thật đã sync để tạo landing page.");
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,12 +61,17 @@ export function LandingPagesContent({
     const response = await fetch("/api/landing-pages", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ productSku: selectedProduct.sku, templateId })
+      body: JSON.stringify({ productSku: selectedProduct.sku, templateId, createAiImages })
     });
     const payload = (await response.json().catch(() => null)) as ApiEnvelope<LandingPage> | null;
     if (response.ok && payload?.success) {
       setPages((current) => [payload.data, ...current.filter((page) => page.id !== payload.data.id)]);
-      showResult(`Đã tạo landing page nháp: ${payload.data.title}.`);
+      const imageMessage = payload.data.imageJobQueued
+        ? " Đã xếp job ảnh AI 4:5, mở Cầu nối ảnh AI để local ImageFlow render và upload ảnh."
+        : payload.data.imageJobError
+          ? ` Chưa xếp được job ảnh AI: ${payload.data.imageJobError}`
+          : "";
+      showResult(`Đã tạo landing page nháp: ${payload.data.title}.${imageMessage}`);
     } else {
       showResult(payload && !payload.success ? payload.error ?? "Tạo landing page lỗi." : "Tạo landing page lỗi.");
     }
@@ -114,6 +127,18 @@ export function LandingPagesContent({
               onSelect={setSelectedProduct}
             />
           </div>
+          <label className="mt-4 flex items-start gap-3 rounded-lg border border-sky-100 bg-sky-50 p-3 text-sm leading-6 text-slate-700">
+            <input
+              type="checkbox"
+              checked={createAiImages}
+              onChange={(event) => setCreateAiImages(event.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            />
+            <span>
+              <span className="block font-bold text-slate-950">Tạo ảnh AI bằng ImageFlow</span>
+              CRM sẽ tạo job 4:5 từ ảnh, mô tả và promptAssets thật của sản phẩm. Local ImageFlow render xong thì public landing page tự ưu tiên ảnh AI cho hero và gallery.
+            </span>
+          </label>
           <div className="mt-4 grid gap-2">
             {templates.map((template) => (
               <button
@@ -162,6 +187,9 @@ export function LandingPagesContent({
                       <h3 className="break-words text-sm font-bold text-slate-950">{page.title}</h3>
                       <StatusPill tone={page.status === "published" ? "success" : "warning"}>
                         {statusLabel(page.status)}
+                      </StatusPill>
+                      <StatusPill tone={page.creativeImages.length > 0 ? "success" : page.imageJobError ? "danger" : "info"}>
+                        {imageStatusLabel(page)}
                       </StatusPill>
                     </div>
                     <p className="mt-1 break-all text-xs text-slate-500">{page.publicUrl}</p>

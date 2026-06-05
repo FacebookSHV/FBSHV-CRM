@@ -9,7 +9,7 @@ Last updated: 2026-06-05
 - Worker: `fbshv-crm`.
 - D1: `fbshv_crm_db`.
 - R2: `fbshv-crm-assets`.
-- Latest deploy verified in this run: `7a96c100-2583-412a-8eae-9bc825f557e7`.
+- Latest deploy verified in this run: `b74936ee-576e-42e5-a027-36e3166e0949`.
 
 ## Current Verified Capabilities
 
@@ -28,16 +28,20 @@ Last updated: 2026-06-05
 - Facebook automation live-write is enabled for Messenger auto reply, comment auto reply, and phone-number comment hiding.
 - Landing Page module is live:
   - Admin route `/landing-pages` creates mobile-first landing pages from synced real products only.
+  - Admin route `/landing-pages` now has an ImageFlow toggle when creating a landing page. When enabled, CRM creates a `landing_page` ImageFlow job at 4:5 from real Product Core `images[]` and `promptAssets`.
   - Public route `/lp/[slug]` renders outside the CRM shell for ad traffic.
+  - Public route `/lp/[slug]` prioritizes completed ImageFlow R2 assets for the hero and gallery, then falls back to Product Core images if no creative assets exist.
   - D1 tables: `landing_pages`, `landing_page_variants`, `landing_page_events`.
   - Browser Pixel and server CAPI use the same `event_id` for Meta dedup when `META_PIXEL_ID` and `META_CAPI_ACCESS_TOKEN` are configured.
   - Production test created and published slug `1-bo-cs-300w-k268-sales-fast-9d322a` from SKU `1_BO_CS_300W_K268`; D1 recorded 18 events, 1 lead, and 2 CAPI sent events.
+  - Production test created and published slug `1-bo-cs-300w-k268-sales-fast-7ef131` from SKU `1_BO_CS_300W_K268`; ImageFlow job `1341f7bc-1b3e-418e-bc53-8e93c764201f` completed with 5 uploaded 4:5 R2 assets and the public page hero read back `b6a2eda3-76e0-4884-b053-da30ad80cc78`.
 - ImageFlow bridge initial module added:
   - UI route `/imageflow-bridge` creates image jobs from real synced products.
   - Mobile and tablet/PC are separate layouts, not one squeezed responsive table.
   - D1 tables: `imageflow_jobs`, `imageflow_assets`.
   - Local bridge script: `scripts/imageflow-bridge.mjs`.
   - CRM adapter script: `scripts/imageflow-crm-adapter.mjs`; it submits CRM product context to ImageFlow local `http://127.0.0.1:7096`, targets Facebook album `4:5` at `1080x1350`, waits for `final_facebook_feed_*.jpg`, and lets the bridge upload those assets back to CRM.
+  - Adapter now ignores stale ImageFlow output files whose `mtime` is older than the current wait window, preventing old deterministic queue output from being uploaded as a new job result.
   - Bridge stores rendered images in R2 and mirrors metadata into `content_media` for Content Planner.
   - If ImageFlow local queue is busy, jobs move to `needs_user` with a clear retry reason instead of producing mock images.
   - Production route `/imageflow-bridge` verified with Chrome profile `fbshv-meta` on desktop 1366px, tablet 820px, and mobile 390px.
@@ -103,6 +107,7 @@ Last updated: 2026-06-05
   - `/settings`
   - `/landing-pages`
   - `/lp/1-bo-cs-300w-k268-sales-fast-9d322a`
+  - `/lp/1-bo-cs-300w-k268-sales-fast-7ef131`
   - `/imageflow-bridge`
   - `POST /api/products/sync`
   - `GET /api/products/search?q=1_BO_CS_300W_K268`
@@ -123,6 +128,8 @@ Last updated: 2026-06-05
   - Submitted lead test; UI returned Pixel/CAPI success message.
   - Refreshed public URL and confirmed the page persisted.
   - D1 remote confirmed `status=published`, `leads=1`, `capi_sent=2`.
+  - After redesign deploy `b74936ee-576e-42e5-a027-36e3166e0949`, created and published landing page `1-bo-cs-300w-k268-sales-fast-7ef131` from the production UI with the ImageFlow toggle enabled.
+  - Local bridge completed ImageFlow job `1341f7bc-1b3e-418e-bc53-8e93c764201f` and uploaded 5 R2 JPEG assets. Public page reload on mobile confirmed hero image source `/api/imageflow/assets/b6a2eda3-76e0-4884-b053-da30ad80cc78`.
 - Responsive checks this run:
   - `/dashboard`: mobile, tablet, desktop, no horizontal overflow; mobile and tablet/PC render different workspace layouts.
   - `/products`: mobile, tablet, desktop, no horizontal overflow; page header now uses separated mobile/tablet-PC layout.
@@ -130,6 +137,7 @@ Last updated: 2026-06-05
   - `/settings`: mobile, tablet, desktop, no horizontal overflow after fixing tablet card columns.
   - `/ads`: mobile, tablet, desktop, no horizontal overflow.
   - `/lp/1-bo-cs-300w-k268-sales-fast-9d322a`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow.
+  - `/lp/1-bo-cs-300w-k268-sales-fast-7ef131`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow; 5 ImageFlow images render; lead form and CTA visible.
 
 ## Do Not Commit
 
@@ -146,4 +154,4 @@ Last updated: 2026-06-05
 - The CAPI token source is the current active encrypted Meta connection token. If the Facebook connection is rotated or expires, refresh Facebook connection and update `META_CAPI_ACCESS_TOKEN` accordingly.
 - Landing Page currently has one active variant per page. The schema supports variants, but full A/B traffic splitting and AI copy generation UI are still future work.
 - ImageFlow local bridge is production-verified for CRM upload. If a future ImageFlow local queue is busy, CRM jobs should stay `needs_user` with the sanitized queue reason and be retried after the local queue is idle.
-- Latest FBSHV deploy: Cloudflare Worker version `7a96c100-2583-412a-8eae-9bc825f557e7`.
+- Latest FBSHV deploy: Cloudflare Worker version `b74936ee-576e-42e5-a027-36e3166e0949`.

@@ -6,7 +6,8 @@ import type { LandingTemplateId } from "@/lib/landing-pages/types";
 const createLandingPageSchema = z.object({
   productSku: z.string().trim().min(1).max(120),
   templateId: z.enum(["sales_fast", "video_guide", "compare"]),
-  title: z.string().trim().max(200).optional()
+  title: z.string().trim().max(200).optional(),
+  createAiImages: z.boolean().optional()
 });
 
 export async function GET() {
@@ -20,7 +21,8 @@ export async function POST(request: Request) {
     return ok(await createLandingPage({
       productSku: parsed.data.productSku,
       templateId: parsed.data.templateId as LandingTemplateId,
-      title: parsed.data.title
+      title: parsed.data.title,
+      createAiImages: parsed.data.createAiImages
     }));
   } catch (error) {
     return failFromError(error);
