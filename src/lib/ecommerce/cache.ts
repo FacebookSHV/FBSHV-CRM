@@ -1,12 +1,15 @@
 import { getD1Database } from "@/lib/db";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
-import { getEcommerceProvider } from "./provider";
+import { getEcommerceProviderAsync } from "./provider";
 import type { ApiResult, ProductSyncSummary, ProductWithInventory } from "./types";
 
 type CacheProductInput = Partial<ProductWithInventory> & {
   id?: string | null;
   sku?: string | null;
   name?: string | null;
+  images?: unknown;
+  promptAssets?: unknown;
+  variants?: unknown;
 };
 
 type CachedProductRow = {
@@ -78,10 +81,60 @@ function safeJson(value: unknown) {
   }
 }
 
+function parseJsonRecord(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values)];
+}
+
+function normalizePromptAssets(input: unknown, raw: Record<string, unknown>) {
+  const assets = parseJsonRecord(input);
+  const rawAssets = parseJsonRecord(raw.promptAssets);
+  const merged = { ...rawAssets, ...assets };
+  const allImageUrls = uniqueStrings([
+    ...stringArray(rawAssets.allImageUrls),
+    ...stringArray(assets.allImageUrls)
+  ]);
+  if (allImageUrls.length > 0) merged.allImageUrls = allImageUrls;
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function normalizeVariants(input: unknown, raw: Record<string, unknown>) {
+  const variants = Array.isArray(input) ? input : Array.isArray(raw.variants) ? raw.variants : [];
+  return variants.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+}
+
 export function normalizeProductForCache(input: CacheProductInput, syncedAt = nowIso()): ProductWithInventory {
+  const raw = parseJsonRecord(input.rawPayload);
   const sku = safeText(input.sku, safeText(input.id, crypto.randomUUID()));
   const availableStock = safeNumber(input.availableStock, safeNumber(input.stock, 0));
   const lowStockThreshold = safeNumber(input.lowStockThreshold, 10);
+  const promptAssets = normalizePromptAssets(input.promptAssets, raw);
+  const imageUrl = safeText(input.imageUrl, safeText(raw.imageUrl));
+  const images = uniqueStrings([
+    imageUrl,
+    ...stringArray(input.images),
+    ...stringArray(raw.images),
+    ...stringArray(promptAssets?.allImageUrls)
+  ]);
+  const variants = normalizeVariants(input.variants, raw);
 
   return {
     id: safeText(input.id, sku),
@@ -97,8 +150,11 @@ export function normalizeProductForCache(input: CacheProductInput, syncedAt = no
     discountAmount: safeNumber(input.discountAmount),
     discountPercent: safeNumber(input.discountPercent),
     currency: safeText(input.currency, "VND"),
-    imageUrl: safeText(input.imageUrl),
-    description: safeText(input.description),
+    imageUrl: imageUrl || images[0] || "",
+    images,
+    description: safeText(input.description, safeText(raw.description)),
+    promptAssets,
+    variants,
     status: normalizeStatus(input.status, availableStock, lowStockThreshold),
     source: safeText(input.source, "ecommerce_external_products"),
     rawPayload: safeText(input.rawPayload, safeJson(input)),
@@ -114,7 +170,7 @@ export function normalizeProductForCache(input: CacheProductInput, syncedAt = no
 
 function mapCachedProduct(row: CachedProductRow): ProductWithInventory {
   const syncedAt = row.synced_at || row.inventory_synced_at || nowIso();
-  return {
+  return normalizeProductForCache({
     id: row.id,
     workspaceId: row.workspace_id,
     externalProductId: row.external_product_id,
@@ -140,7 +196,7 @@ function mapCachedProduct(row: CachedProductRow): ProductWithInventory {
     availableStock: safeNumber(row.available_stock),
     reservedStock: safeNumber(row.reserved_stock),
     lowStockThreshold: safeNumber(row.low_stock_threshold, 10)
-  };
+  }, syncedAt);
 }
 
 const cachedProductSelect = `
@@ -320,7 +376,7 @@ export async function cacheProductsToD1(products: ProductWithInventory[]) {
 export async function syncProductsFromExternal(
   limit = 200
 ): Promise<ApiResult<{ synced: number; cached: number; source: "http"; d1: boolean; lastSyncedAt: string | null }>> {
-  const products = await getEcommerceProvider().getProducts({ limit });
+  const products = await (await getEcommerceProviderAsync()).getProducts({ limit });
   const db = await getD1Database();
   if (!products.success) {
     await writeProductSyncLog(db, "failed", 0, products.error);

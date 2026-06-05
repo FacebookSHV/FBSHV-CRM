@@ -15,8 +15,8 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
   return (
     <aside
       className={[
-        "fixed inset-y-0 left-0 z-40 w-72 border-r border-white/10 bg-[#08111f] text-slate-100 shadow-2xl shadow-slate-950/20 transition-transform md:translate-x-0",
-        open ? "translate-x-0" : "-translate-x-full"
+        "fixed inset-y-0 left-0 z-40 w-72 border-r border-white/10 bg-[#08111f] text-slate-100 shadow-2xl shadow-slate-950/20 transition-transform md:w-64 md:translate-x-0 lg:w-72",
+        open ? "translate-x-0" : "hidden -translate-x-full md:block"
       ].join(" ")}
       aria-label="Điều hướng chính"
     >
@@ -43,8 +43,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
               <div className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
-                  const active =
-                    pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
                   return (
                     <Link

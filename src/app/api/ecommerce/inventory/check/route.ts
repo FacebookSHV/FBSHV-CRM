@@ -1,5 +1,5 @@
 import { fail, fromResult } from "@/lib/api-response";
-import { getEcommerceProvider } from "@/lib/ecommerce/provider";
+import { getEcommerceProviderAsync } from "@/lib/ecommerce/provider";
 import { inventoryCheckSchema } from "@/lib/ecommerce/validation";
 
 export async function POST(request: Request) {
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return fail("Dữ liệu kiểm tồn không hợp lệ");
 
   // NEO: Kiểm tra tồn kho realtime trước khi tạo đơn
-  const result = await getEcommerceProvider().checkInventory(
+  const result = await (await getEcommerceProviderAsync()).checkInventory(
     parsed.data.sku,
     parsed.data.quantity
   );

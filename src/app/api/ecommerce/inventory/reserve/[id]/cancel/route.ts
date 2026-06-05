@@ -1,5 +1,5 @@
 import { fail, fromResult } from "@/lib/api-response";
-import { getEcommerceProvider } from "@/lib/ecommerce/provider";
+import { getEcommerceProviderAsync } from "@/lib/ecommerce/provider";
 import { z } from "zod";
 
 const paramsSchema = z.object({
@@ -12,5 +12,5 @@ export async function POST(
 ) {
   const parsed = paramsSchema.safeParse(await context.params);
   if (!parsed.success) return fail("Mã giữ hàng không hợp lệ");
-  return fromResult(await getEcommerceProvider().cancelReservation(parsed.data.id));
+  return fromResult(await (await getEcommerceProviderAsync()).cancelReservation(parsed.data.id));
 }

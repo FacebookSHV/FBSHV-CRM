@@ -2,6 +2,7 @@ import {
   BarChart3,
   Bot,
   Boxes,
+  Cable,
   CalendarDays,
   ClipboardList,
   Gauge,
@@ -30,6 +31,7 @@ export const navItems = [
   { href: "/automation", label: "Automation", icon: Workflow },
   { href: "/ai-assistant", label: "AI Assistant", icon: Bot },
   { href: "/landing-pages", label: "Landing Page", icon: LayoutTemplate },
+  { href: "/imageflow-bridge", label: "Cầu nối ảnh AI", icon: Cable },
   { href: "/reports", label: "Báo cáo", icon: BarChart3 },
   { href: "/settings", label: "Cài đặt", icon: Settings },
   { href: "/audit-logs", label: "Audit Log", icon: History }
@@ -46,11 +48,11 @@ export const navGroups = [
   },
   {
     label: "Tăng trưởng",
-    items: [navItems[8], navItems[9], navItems[10], navItems[11], navItems[12]]
+    items: [navItems[8], navItems[9], navItems[10], navItems[11], navItems[12], navItems[13]]
   },
   {
     label: "Hệ thống",
-    items: [navItems[13], navItems[14]]
+    items: [navItems[14], navItems[15]]
   }
 ] as const;
 

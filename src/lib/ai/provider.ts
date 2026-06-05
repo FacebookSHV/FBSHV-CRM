@@ -116,12 +116,16 @@ function configFromRuntimeKey(key: AiRuntimeKey, env: Record<string, string | un
 
 function productLine(product?: ProductWithInventory | null) {
   if (!product) return "Chưa chọn sản phẩm cụ thể.";
+  const imageLines = (product.images ?? []).slice(0, 8).map((url, index) => `Ảnh ${index + 1}: ${url}`);
   return [
     `Sản phẩm: ${product.name}`,
     `SKU: ${product.sku}`,
     `Giá: ${formatMoney(product.currentPrice, product.currency)}`,
-    `Tồn khả dụng: ${product.availableStock}`
-  ].join("\n");
+    `Tồn khả dụng: ${product.availableStock}`,
+    product.description ? `Mô tả Product Core: ${product.description}` : "",
+    product.promptAssets?.promptText ? `Ngữ cảnh prompt Product Core: ${product.promptAssets.promptText}` : "",
+    imageLines.length > 0 ? `Danh sách ảnh thật:\n${imageLines.join("\n")}` : ""
+  ].filter(Boolean).join("\n");
 }
 
 function fallbackText(task: AiTask, product?: ProductWithInventory | null, prompt = "") {

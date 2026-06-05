@@ -1,10 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { AppShell } from "@/components/shell/app-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "FBSHV CRM",
   description: "CRM Facebook kết nối Web Quản Lý TMĐT qua API an toàn"
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1
 };
 
 export default function RootLayout({

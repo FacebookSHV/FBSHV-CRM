@@ -30,7 +30,7 @@ export function AppShell({ children, environmentLabel = "Môi trường real" }:
         />
       ) : null}
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="md:pl-72">
+      <div className="md:ml-64 md:w-[calc(100%-16rem)] lg:ml-72 lg:w-[calc(100%-18rem)]">
         <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 shadow-sm shadow-slate-200/40 backdrop-blur-xl">
           <div className="flex min-h-16 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
             <button

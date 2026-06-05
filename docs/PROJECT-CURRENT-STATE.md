@@ -1,6 +1,6 @@
 # FBSHV CRM - Project Current State
 
-Last updated: 2026-06-03
+Last updated: 2026-06-05
 
 ## Production
 
@@ -9,11 +9,12 @@ Last updated: 2026-06-03
 - Worker: `fbshv-crm`.
 - D1: `fbshv_crm_db`.
 - R2: `fbshv-crm-assets`.
-- Latest deploy verified in this run: `7369cc9b-6ca0-40cb-b598-8387b797492a`.
+- Latest deploy verified in this run: `7a96c100-2583-412a-8eae-9bc825f557e7`.
 
 ## Current Verified Capabilities
 
-- Products sync from Web Quan Ly TMDT real API into CRM D1 cache; `/products` keeps synced data after F5 and search works on saved products.
+- Products sync from Web Quan Ly TMDT real Product Core API into CRM D1 cache; `/products` keeps synced data after F5 and search works on saved products.
+- Product Core prompt payload is preserved in CRM cache/API: `images[]`, `promptAssets`, and `variants[]` are normalized from live endpoint payload or restored from `raw_payload_json`.
 - Content Planner uses real product picker from synced products; draft, schedule, edit, delete confirm, publish job/live confirm, and F5 persistence were verified on production.
 - AI Settings supports Gemini key slots 1-5 plus OpenAI slot. Production currently shows:
   - `GEMINI_API_KEY_1`: `valid`, masked only.
@@ -31,6 +32,19 @@ Last updated: 2026-06-03
   - D1 tables: `landing_pages`, `landing_page_variants`, `landing_page_events`.
   - Browser Pixel and server CAPI use the same `event_id` for Meta dedup when `META_PIXEL_ID` and `META_CAPI_ACCESS_TOKEN` are configured.
   - Production test created and published slug `1-bo-cs-300w-k268-sales-fast-9d322a` from SKU `1_BO_CS_300W_K268`; D1 recorded 18 events, 1 lead, and 2 CAPI sent events.
+- ImageFlow bridge initial module added:
+  - UI route `/imageflow-bridge` creates image jobs from real synced products.
+  - Mobile and tablet/PC are separate layouts, not one squeezed responsive table.
+  - D1 tables: `imageflow_jobs`, `imageflow_assets`.
+  - Local bridge script: `scripts/imageflow-bridge.mjs`.
+  - CRM adapter script: `scripts/imageflow-crm-adapter.mjs`; it submits CRM product context to ImageFlow local `http://127.0.0.1:7096`, targets Facebook album `4:5` at `1080x1350`, waits for `final_facebook_feed_*.jpg`, and lets the bridge upload those assets back to CRM.
+  - Bridge stores rendered images in R2 and mirrors metadata into `content_media` for Content Planner.
+  - If ImageFlow local queue is busy, jobs move to `needs_user` with a clear retry reason instead of producing mock images.
+  - Production route `/imageflow-bridge` verified with Chrome profile `fbshv-meta` on desktop 1366px, tablet 820px, and mobile 390px.
+  - Mobile long local-path errors now wrap inside the job card; post-deploy verification shows no horizontal page overflow at 390px, 820px, or 1366px.
+  - Production test job `a5c640a9-e12a-4797-ade9-e3f12db606ec` was created from SKU `1_BO_CS_300W_K268`; local bridge claimed it and staged `job.json` under ImageFlow work dir.
+  - Production job `a5c640a9-e12a-4797-ade9-e3f12db606ec` completed with 5 R2 JPEG assets at `1080x1350`; asset index 0 was replaced via upsert after deploy and all 5 public assets now have distinct SHA-256 hashes.
+  - Production test job `f094d59b-a2c9-43e0-8b63-e3c92b9f2ab2` confirmed ImageFlow `productContextJson` is built from Product Core detail by SKU and includes `images[]` plus `promptAssets`.
 - UI shell now separates mobile from tablet/PC:
   - Mobile uses compact page headers, bottom navigation, and mobile-only dashboard work actions.
   - Tablet/PC uses the fixed left operator sidebar, grouped navigation, wider workspace headers, and desktop dashboard panels.
@@ -55,6 +69,10 @@ Last updated: 2026-06-03
 
 ## Current External Config
 
+- ImageFlow bridge Worker secret is configured:
+  - `IMAGEFLOW_BRIDGE_TOKEN`
+- ImageFlow local server verified running on `http://127.0.0.1:7096`; ImageFlow produced Facebook feed assets at `1080x1350` and CRM uploaded them to R2/content media.
+- Ecommerce runtime secrets were refreshed on Worker `fbshv-crm` from local valid source: `ECOMMERCE_API_BASE_URL`, `ECOMMERCE_API_KEY`, `ECOMMERCE_WEBHOOK_SECRET`, `MOCK_ECOMMERCE_API=false`.
 - Pixel + CAPI is now enabled with Cloudflare Worker secrets:
   - `META_PIXEL_ID`: configured.
   - `META_CAPI_ACCESS_TOKEN`: configured from the valid encrypted Meta connection token already stored in CRM D1.
@@ -85,7 +103,19 @@ Last updated: 2026-06-03
   - `/settings`
   - `/landing-pages`
   - `/lp/1-bo-cs-300w-k268-sales-fast-9d322a`
+  - `/imageflow-bridge`
+  - `POST /api/products/sync`
+  - `GET /api/products/search?q=1_BO_CS_300W_K268`
+  - `POST /api/products/:id/check-price`
+  - `POST /api/products/:id/check-stock`
+  - `POST /api/imageflow/jobs`
   - `POST /api/meta/capi/events`
+- Production Product Core verification:
+  - `/api/products/sync` synced 200 products and cached 200 into D1.
+  - `/api/products?limit=50` returned 50/50 products with `images[]` and 50/50 products with `promptAssets`.
+  - Search by SKU `1_BO_CS_300W_K268` still returned the product after hard reload/F5.
+  - Check price returned `158000 VND`; check stock returned `availableStock=136`, `enoughStock=true`.
+  - Source product description can be empty when Product Core source data is empty; CRM preserves the empty value instead of inventing text.
 - Production landing page actions verified:
   - Created a draft landing page from synced product SKU `1_BO_CS_300W_K268`.
   - Published the landing page.
@@ -115,3 +145,5 @@ Last updated: 2026-06-03
 - `META_TEST_EVENT_CODE` is optional and not configured. Add it later only if Events Manager test-event diagnostics are needed.
 - The CAPI token source is the current active encrypted Meta connection token. If the Facebook connection is rotated or expires, refresh Facebook connection and update `META_CAPI_ACCESS_TOKEN` accordingly.
 - Landing Page currently has one active variant per page. The schema supports variants, but full A/B traffic splitting and AI copy generation UI are still future work.
+- ImageFlow local bridge is production-verified for CRM upload. If a future ImageFlow local queue is busy, CRM jobs should stay `needs_user` with the sanitized queue reason and be retried after the local queue is idle.
+- Latest FBSHV deploy: Cloudflare Worker version `7a96c100-2583-412a-8eae-9bc825f557e7`.

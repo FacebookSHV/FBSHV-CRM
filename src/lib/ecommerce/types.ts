@@ -17,7 +17,14 @@ export type ProductCacheItem = {
   discountPercent: number;
   currency: string;
   imageUrl: string;
+  images: string[];
   description: string;
+  promptAssets?: {
+    allImageUrls?: string[];
+    promptText?: string;
+    [key: string]: unknown;
+  };
+  variants?: Array<Record<string, unknown>>;
   status: "active" | "inactive" | "low_stock";
   source?: string;
   rawPayload?: string;

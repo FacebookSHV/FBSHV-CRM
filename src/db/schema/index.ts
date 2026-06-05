@@ -3,6 +3,7 @@ export * from "./automation";
 export * from "./content";
 export * from "./conversions";
 export * from "./core";
+export * from "./imageflow";
 export * from "./landing-pages";
 export * from "./orders";
 export * from "./page-audit";

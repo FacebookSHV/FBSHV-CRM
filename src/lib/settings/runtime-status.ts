@@ -1,6 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getAiConfig } from "@/lib/ai/provider";
-import { getEcommerceProvider } from "@/lib/ecommerce/provider";
+import { getEcommerceProvider, getEcommerceRuntimeEnv } from "@/lib/ecommerce/provider";
 import { getFacebookRuntimeConfigAsync } from "@/lib/facebook/env";
 import { getAdsReadiness } from "@/lib/facebook/ads";
 import { getFacebookAutomationConfigAsync } from "@/lib/facebook/automation";
@@ -29,7 +29,8 @@ export async function getRuntimeSettingsStatus() {
   const businessSdk = await getBusinessSdkStatus();
   const conversions = await getConversionsStatus();
   const bindings = await getBindings();
-  const ecommerce = getEcommerceProvider();
+  const ecommerceEnv = await getEcommerceRuntimeEnv();
+  const ecommerce = getEcommerceProvider(ecommerceEnv);
   const aiConfig = getAiConfig();
   const activeAiProvider = ai.keys.find((key) => key.status === "valid")?.provider ?? ai.keys[0]?.provider ?? aiConfig.provider;
   const automation = await getFacebookAutomationConfigAsync();
@@ -43,9 +44,9 @@ export async function getRuntimeSettingsStatus() {
       appId: present(facebook.appId) ? facebook.appId : null
     },
     ecommerce: {
-      mode: process.env.MOCK_ECOMMERCE_API === "false" ? "real" : "not_enabled",
+      mode: ecommerceEnv.MOCK_ECOMMERCE_API === "false" ? "real" : "not_enabled",
       configured: ecommerce.constructor.name !== "BlockedEcommerceManagementProvider",
-      baseUrl: present(process.env.ECOMMERCE_API_BASE_URL) ? process.env.ECOMMERCE_API_BASE_URL : null
+      baseUrl: present(ecommerceEnv.ECOMMERCE_API_BASE_URL) ? ecommerceEnv.ECOMMERCE_API_BASE_URL : null
     },
     ai: {
       provider: activeAiProvider,

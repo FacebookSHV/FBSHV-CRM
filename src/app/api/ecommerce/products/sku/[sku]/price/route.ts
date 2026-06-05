@@ -1,5 +1,5 @@
 import { fail, fromResult } from "@/lib/api-response";
-import { getEcommerceProvider } from "@/lib/ecommerce/provider";
+import { getEcommerceProviderAsync } from "@/lib/ecommerce/provider";
 import { skuParamSchema } from "@/lib/ecommerce/validation";
 
 export async function GET(
@@ -8,5 +8,5 @@ export async function GET(
 ) {
   const parsed = skuParamSchema.safeParse(await context.params);
   if (!parsed.success) return fail("SKU không hợp lệ");
-  return fromResult(await getEcommerceProvider().getSkuPrice(parsed.data.sku));
+  return fromResult(await (await getEcommerceProviderAsync()).getSkuPrice(parsed.data.sku));
 }

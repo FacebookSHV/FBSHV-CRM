@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST as createFacebookOrder } from "@/app/api/ecommerce/orders/from-facebook/route";
+import { normalizeProductForCache } from "@/lib/ecommerce/cache";
 import { HttpEcommerceManagementProvider } from "@/lib/ecommerce/http-provider";
 import { getEcommerceProvider } from "@/lib/ecommerce/provider";
 import { MockEcommerceManagementProvider } from "@/lib/ecommerce/mock-provider";
@@ -114,7 +115,7 @@ describe("mock ecommerce provider", () => {
 
     const provider = new HttpEcommerceManagementProvider({
       baseUrl: "https://ecommerce.example.com",
-      apiKey: "test-key"
+      apiKey: "unit-test-credential"
     });
     const result = await provider.getProducts({ q: "camera", limit: 5 });
 
@@ -139,7 +140,7 @@ describe("mock ecommerce provider", () => {
 
     const provider = new HttpEcommerceManagementProvider({
       baseUrl: "https://ecommerce.example.com",
-      apiKey: "test-key"
+      apiKey: "unit-test-credential"
     });
     const result = await provider.syncProducts();
 
@@ -162,10 +163,67 @@ describe("mock ecommerce provider", () => {
     );
     const provider = new HttpEcommerceManagementProvider({
       baseUrl: "https://ecommerce.example.com",
-      apiKey: "test-key"
+      apiKey: "unit-test-credential"
     });
     const result = await provider.checkInventory("SKU_REAL", 1);
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.enoughStock).toBe(true);
+  });
+
+  it("preserves Product Core images, prompt assets, and variants", () => {
+    const product = normalizeProductForCache({
+      id: "product-1",
+      sku: "SKU_FULL",
+      name: "Full product",
+      imageUrl: "https://cdn.example.com/main.jpg",
+      images: [
+        "https://cdn.example.com/main.jpg",
+        "https://cdn.example.com/detail.jpg"
+      ],
+      description: "Real Product Core description",
+      promptAssets: {
+        allImageUrls: [
+          "https://cdn.example.com/main.jpg",
+          "https://cdn.example.com/detail.jpg"
+        ],
+        promptText: "Use the real product images and description."
+      },
+      variants: [{ id: "variant-1", sku: "SKU_FULL_RED", name: "Red" }]
+    });
+
+    expect(product.images).toEqual([
+      "https://cdn.example.com/main.jpg",
+      "https://cdn.example.com/detail.jpg"
+    ]);
+    expect(product.promptAssets?.allImageUrls).toHaveLength(2);
+    expect(product.promptAssets?.promptText).toContain("real product");
+    expect(product.variants?.[0]?.sku).toBe("SKU_FULL_RED");
+  });
+
+  it("restores Product Core prompt data from a persisted raw payload", () => {
+    const product = normalizeProductForCache({
+      id: "product-raw",
+      sku: "SKU_RAW",
+      name: "Raw product",
+      rawPayload: JSON.stringify({
+        imageUrl: "https://cdn.example.com/raw-main.jpg",
+        images: [
+          "https://cdn.example.com/raw-main.jpg",
+          "https://cdn.example.com/raw-detail.jpg"
+        ],
+        description: "Description from raw payload",
+        promptAssets: {
+          allImageUrls: ["https://cdn.example.com/raw-detail.jpg"],
+          promptText: "Prompt from raw payload"
+        },
+        variants: [{ id: "raw-variant", sku: "SKU_RAW_01" }]
+      })
+    });
+
+    expect(product.imageUrl).toBe("https://cdn.example.com/raw-main.jpg");
+    expect(product.description).toBe("Description from raw payload");
+    expect(product.images).toHaveLength(2);
+    expect(product.promptAssets?.promptText).toBe("Prompt from raw payload");
+    expect(product.variants?.[0]?.id).toBe("raw-variant");
   });
 });

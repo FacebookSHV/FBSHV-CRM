@@ -15,7 +15,10 @@ const products = demoProducts.map((item) => ({
   ...item,
   status: item.status as ProductWithInventory["status"],
   workspaceId: "workspace-demo",
-  externalProductId: item.id
+  externalProductId: item.id,
+  images: item.imageUrl ? [item.imageUrl] : [],
+  promptAssets: item.imageUrl ? { allImageUrls: [item.imageUrl], promptText: item.description || item.name } : undefined,
+  variants: []
 })) satisfies ProductWithInventory[];
 
 function findProductBySku(sku: string) {

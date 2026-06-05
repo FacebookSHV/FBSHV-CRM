@@ -1,5 +1,5 @@
 import { fail, fromResult } from "@/lib/api-response";
-import { getEcommerceProvider } from "@/lib/ecommerce/provider";
+import { getEcommerceProviderAsync } from "@/lib/ecommerce/provider";
 import { facebookOrderSchema } from "@/lib/ecommerce/validation";
 import { getProductionWriteTestDecision } from "@/lib/external-test-safety";
 
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const provider = getEcommerceProvider();
+  const provider = await getEcommerceProviderAsync();
   const price = await provider.getSkuPrice(parsed.data.sku);
   if (!price.success) return fromResult(price);
 
