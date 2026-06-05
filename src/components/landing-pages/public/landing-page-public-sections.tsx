@@ -20,6 +20,12 @@ type LandingPublicSectionsProps = {
   submitting: boolean;
 };
 
+function landingImageClass(image: string, creativeImages: string[]) {
+  return creativeImages.includes(image)
+    ? "h-full w-full object-cover"
+    : "h-full w-full object-contain p-2";
+}
+
 export function LandingPublicSections({
   images,
   leadName,
@@ -71,7 +77,7 @@ export function LandingPublicSections({
               <figure key={image} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="aspect-[4/5] bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={image} alt={`${product?.name ?? page.title} ${index + 1}`} className="h-full w-full object-contain" loading="lazy" />
+                  <img src={image} alt={`${product?.name ?? page.title} ${index + 1}`} className={landingImageClass(image, page.creativeImages)} loading="lazy" />
                 </div>
                 <figcaption className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600">
                   <ImageIcon className="h-4 w-4 text-brand-600" aria-hidden="true" />

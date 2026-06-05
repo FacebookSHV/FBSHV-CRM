@@ -90,6 +90,7 @@ function normalizeImages(...values) {
 
 function buildProduct(job) {
   const context = parseJson(job.productContextJson);
+  const jobPrompt = parseJson(job.promptJson);
   const product = job.product && typeof job.product === "object" ? job.product : {};
   const raw = parseJson(context.rawPayload || product.rawPayload);
   const promptAssets = raw.promptAssets && typeof raw.promptAssets === "object" ? raw.promptAssets : {};
@@ -107,6 +108,18 @@ function buildProduct(job) {
   const name = String(context.name || product.name || raw.name || job.title || sku).trim();
   const description = String(context.description || product.description || raw.description || "").trim();
   const promptText = String(promptAssets.promptText || `${name}\n\n${description}`.trim());
+  const frameSpec = jobPrompt.frameSpec && typeof jobPrompt.frameSpec === "object" ? jobPrompt.frameSpec : null;
+  const frameSpecText = frameSpec
+    ? [
+        "YEU CAU KHUNG HINH BAT BUOC:",
+        `- Moi anh phai dung ti le ${job.targetAspectRatio || "4:5"} va kich thuoc ${Number(job.outputWidth || 1080)}x${Number(job.outputHeight || 1350)}px.`,
+        "- Khong tao anh vuong/ngang neu job yeu cau 4:5.",
+        "- Khong de chu, gia, logo hoac san pham cham mep khung.",
+        "- San pham chinh nam trong safe area, khong bi crop mat chi tiet quan trong.",
+        "- Neu tao album nhieu anh, moi anh dung dung slot/index trong frameSpec.",
+        JSON.stringify(frameSpec)
+      ].join("\n")
+    : "";
 
   return {
     id: raw.id || product.externalProductId || product.id || sku,
@@ -129,7 +142,7 @@ function buildProduct(job) {
     reservedStock: Number(product.reservedStock || raw.reservedStock || 0),
     promptAssets: {
       allImageUrls: imageUrls,
-      promptText: `${promptText}\n\nSKU: ${sku}`
+      promptText: `${promptText}\n\nSKU: ${sku}${frameSpecText ? `\n\n${frameSpecText}` : ""}`
     },
     raw_row: raw,
     __imageflow_options: {
@@ -139,6 +152,7 @@ function buildProduct(job) {
       output_width: Number(job.outputWidth || 1080),
       output_height: Number(job.outputHeight || 1350),
       output_size: `${Number(job.outputWidth || 1080)}x${Number(job.outputHeight || 1350)}`,
+      frame_spec: frameSpec,
       fallback_transform: "pad_or_smart_crop"
     }
   };
@@ -257,7 +271,8 @@ async function main() {
           prompt: {
             assetIndex: index,
             aspectRatio: job.targetAspectRatio || "4:5",
-            productSku: product.sku
+            productSku: product.sku,
+            frameSpec: parseJson(job.promptJson).frameSpec || null
           }
         }))
       },

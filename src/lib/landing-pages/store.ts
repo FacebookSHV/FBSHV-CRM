@@ -69,6 +69,54 @@ function slugify(value: string) {
   return normalized || `lp-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+const landingImageFrameSpec = {
+  output: { aspectRatio: "4:5", width: 1080, height: 1350, count: 5 },
+  safeArea: {
+    contentInsetPercent: 8,
+    noTextWithinPercentFromEdge: 10,
+    keepMainProductInsidePercent: 88
+  },
+  slots: [
+    {
+      index: 0,
+      role: "mobile_hero",
+      frame: "4:5 hero card",
+      instruction: "Ảnh chính phải vừa khít khung hero 4:5, sản phẩm nằm giữa, không cắt mất nhãn quan trọng."
+    },
+    {
+      index: 1,
+      role: "price_offer_card",
+      frame: "4:5 product offer",
+      instruction: "Có khoảng trống an toàn cho giá/CTA, không đặt chữ sát mép, không làm sản phẩm nhỏ quá."
+    },
+    {
+      index: 2,
+      role: "benefit_card",
+      frame: "4:5 benefit proof",
+      instruction: "Tập trung lợi ích chính, sản phẩm rõ, nền sạch, đọc được trên màn hình điện thoại."
+    },
+    {
+      index: 3,
+      role: "how_to_use_card",
+      frame: "4:5 usage step",
+      instruction: "Thể hiện thao tác sử dụng/lắp đặt, bố cục thoáng, không crop tay hoặc sản phẩm."
+    },
+    {
+      index: 4,
+      role: "trust_card",
+      frame: "4:5 trust proof",
+      instruction: "Ảnh chốt niềm tin: hàng thật, đóng gói hoặc ứng dụng thực tế, không nhồi quá nhiều chữ."
+    }
+  ],
+  negativePrompt: [
+    "Không tạo ảnh ngang hoặc vuông.",
+    "Không để chữ, logo, giá hoặc sản phẩm chạm mép khung.",
+    "Không crop mất sản phẩm chính.",
+    "Không dùng chữ nhỏ dày đặc khó đọc trên mobile.",
+    "Không tạo poster lộn xộn nhiều mảng cảnh báo."
+  ]
+};
+
 function sanitizeError(error: unknown) {
   const message = error instanceof Error ? error.message : "Không gửi được CAPI.";
   return message.replace(/[A-Za-z0-9_-]{32,}/g, (value) => `${value.slice(0, 6)}...${value.slice(-4)}`);
@@ -248,6 +296,7 @@ export async function createLandingPage(input: { productSku: string; templateId:
           creativeGoal: "Tạo bộ ảnh bán hàng gia dụng dùng cho hero, gallery và quảng cáo Facebook.",
           imageStyle: "ảnh sản phẩm rõ, sạch, ánh sáng thương mại, có bối cảnh sử dụng thực tế, không chữ nhỏ khó đọc",
           requiredRatio: "4:5",
+          frameSpec: landingImageFrameSpec,
           productSku: product.sku
         }
       });

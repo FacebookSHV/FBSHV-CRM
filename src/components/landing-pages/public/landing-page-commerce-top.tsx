@@ -30,13 +30,21 @@ type LandingCommerceTopProps = {
   stockLabel: string;
 };
 
+function landingImageClass(image: string, creativeImages: string[]) {
+  return creativeImages.includes(image)
+    ? "h-full w-full object-cover"
+    : "h-full w-full object-contain p-1.5";
+}
+
 function ProductThumbs({
+  creativeImages,
   images,
   selectedImageIndex,
   setSelectedImageIndex,
   sizeClass,
   max = 8
 }: {
+  creativeImages: string[];
   images: string[];
   selectedImageIndex: number;
   setSelectedImageIndex: Dispatch<SetStateAction<number>>;
@@ -55,7 +63,7 @@ function ProductThumbs({
           aria-label={`Xem ảnh ${index + 1}`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={image} alt="" className="h-full w-full object-cover" loading="lazy" />
+          <img src={image} alt="" className={landingImageClass(image, creativeImages)} loading="lazy" />
         </button>
       ))}
     </div>
@@ -135,11 +143,11 @@ export function LandingCommerceTop({
             <div className="relative aspect-[4/5] min-w-0 overflow-hidden rounded-2xl bg-white/90">
               {heroImage ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={heroImage} alt={product?.name ?? page.title} className="h-full w-full object-contain" />
+                <img src={heroImage} alt={product?.name ?? page.title} className={landingImageClass(heroImage, page.creativeImages)} />
               ) : null}
             </div>
           </div>
-          <ProductThumbs images={images} selectedImageIndex={selectedImageIndex} setSelectedImageIndex={setSelectedImageIndex} sizeClass="h-14 w-14" max={6} />
+          <ProductThumbs creativeImages={page.creativeImages} images={images} selectedImageIndex={selectedImageIndex} setSelectedImageIndex={setSelectedImageIndex} sizeClass="h-[70px] w-14" max={6} />
         </div>
 
         <article className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -218,7 +226,7 @@ export function LandingCommerceTop({
               <div className="relative aspect-[4/5] min-w-0 max-w-full overflow-hidden rounded-2xl bg-white/80">
                 {heroImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={heroImage} alt={product?.name ?? page.title} className="h-full w-full object-contain" />
+                  <img src={heroImage} alt={product?.name ?? page.title} className={landingImageClass(heroImage, page.creativeImages)} />
                 ) : (
                   <div className="flex h-full items-center justify-center text-sm font-bold text-slate-500">Chưa có ảnh sản phẩm</div>
                 )}
@@ -228,7 +236,7 @@ export function LandingCommerceTop({
                 </div>
               </div>
             </div>
-            <ProductThumbs images={images} selectedImageIndex={selectedImageIndex} setSelectedImageIndex={setSelectedImageIndex} sizeClass="h-16 w-16" />
+            <ProductThumbs creativeImages={page.creativeImages} images={images} selectedImageIndex={selectedImageIndex} setSelectedImageIndex={setSelectedImageIndex} sizeClass="h-20 w-16" />
           </div>
         </div>
 

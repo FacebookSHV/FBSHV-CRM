@@ -54,6 +54,29 @@ function assetCount(job: ImageflowJob) {
   return job.assets?.length ?? 0;
 }
 
+const facebookAlbumFrameSpec = {
+  output: { aspectRatio: "4:5", width: 1080, height: 1350 },
+  safeArea: {
+    contentInsetPercent: 8,
+    noTextWithinPercentFromEdge: 10,
+    keepMainProductInsidePercent: 88
+  },
+  slots: [
+    { index: 0, role: "album_cover", frame: "4:5 cover", instruction: "Ảnh bìa phải khớp khung 1080x1350, sản phẩm rõ, không cắt mép." },
+    { index: 1, role: "problem_solution", frame: "4:5 pain point", instruction: "Hook nỗi đau + giải pháp, chữ lớn ít dòng, còn khoảng trắng an toàn." },
+    { index: 2, role: "feature_detail", frame: "4:5 feature", instruction: "Cận cảnh tính năng hoặc chi tiết sản phẩm, không crop phần chính." },
+    { index: 3, role: "how_to_use", frame: "4:5 instruction", instruction: "Thể hiện thao tác dùng/lắp đặt, bố cục thoáng, dễ hiểu trên mobile." },
+    { index: 4, role: "trust_offer", frame: "4:5 trust/offer", instruction: "Ảnh chốt niềm tin hoặc ưu đãi, không nhồi nhiều chữ nhỏ." }
+  ],
+  negativePrompt: [
+    "Không tạo ảnh vuông/ngang.",
+    "Không để chữ hoặc sản phẩm chạm mép.",
+    "Không crop mất sản phẩm chính.",
+    "Không dùng text nhỏ dày đặc.",
+    "Không tạo poster rối nhiều khung cảnh báo."
+  ]
+};
+
 export function ImageflowBridgeContent({ initialJobs, products }: Props) {
   const [jobs, setJobs] = useState(initialJobs);
   const [selectedSku, setSelectedSku] = useState(products[0]?.sku ?? "");
@@ -82,7 +105,8 @@ export function ImageflowBridgeContent({ initialJobs, products }: Props) {
       channel: "facebook_page_album",
       creativeGoal: "Tạo bộ ảnh bán hàng và hướng dẫn thao tác thật",
       imageStyle: "Ảnh sản phẩm rõ ràng, sáng sạch, không chữ nhỏ khó đọc",
-      output: { aspectRatio: "4:5", width: 1080, height: 1350, count: requestedCount }
+      output: { aspectRatio: "4:5", width: 1080, height: 1350, count: requestedCount },
+      frameSpec: { ...facebookAlbumFrameSpec, output: { ...facebookAlbumFrameSpec.output, count: requestedCount } }
     };
     const response = await fetch("/api/imageflow/jobs", {
       method: "POST",
