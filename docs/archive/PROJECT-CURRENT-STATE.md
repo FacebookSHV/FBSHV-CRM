@@ -1,6 +1,6 @@
 # FBSHV CRM - Project Current State
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 ## Production
 
@@ -9,7 +9,7 @@ Last updated: 2026-06-05
 - Worker: `fbshv-crm`.
 - D1: `fbshv_crm_db`.
 - R2: `fbshv-crm-assets`.
-- Latest deploy verified in this run: `c107ff27-831f-4394-8aec-d160c5c2bd53`.
+- Latest deploy verified in this run: `4c84f434-34ae-4b16-92af-857fbe24b7fc`.
 
 ## Current Verified Capabilities
 
@@ -34,10 +34,19 @@ Last updated: 2026-06-05
   - Public route `/lp/[slug]` now uses separate mobile and tablet/PC layout branches. Mobile follows a commerce landing pattern inspired by Shopee/TikTok style: shop header, trust bar, split hero, price card, product bullets, and sticky CTA.
   - Public landing page UI was refactored into separate component files so mobile and tablet/PC can be developed independently without the main public component approaching the 30KB file limit.
   - ImageFlow landing/page-album jobs now include explicit `frameSpec` prompt data for each generated image slot: output `4:5` at `1080x1350`, safe-area rules, slot roles, crop rules, and negative prompts so ChatGPT/ImageFlow creates assets that fit the landing-page frames instead of relying only on CSS.
+  - Landing Page image prompts now add a fan-controller creative brief for SKU/model `CS 300W K268`: preserve the red horizontal PCB, blue button panel, white remote, and cable; require installation-guide and fan-compatibility slots; and forbid renaming the product into a generic power-source/electrical-supply product.
+  - Because K268 currently has too few upstream reference images, the prompt now explicitly requires a source-photo layout mode: use the exact source photo as the product layer and add crop/zoom/callout/background around it instead of redrawing a new PCB, remote, or button panel.
+  - CRM ImageFlow adapter now appends `landingCopy`, `creativeBrief`, `frameSpec`, and a non-negotiable render guard into ImageFlow local `product_package.json` after `/api/product-queue/add`, because ImageFlow's external Product Core fetch is the source of reference assets.
+  - Public landing page conversion UI now shows real offer/price/stock/interest states and fan-compatibility guidance. It does not fake reviews or sold counts when Product Core has no real review/sold fields.
   - D1 tables: `landing_pages`, `landing_page_variants`, `landing_page_events`.
   - Browser Pixel and server CAPI use the same `event_id` for Meta dedup when `META_PIXEL_ID` and `META_CAPI_ACCESS_TOKEN` are configured.
   - Production test created and published slug `1-bo-cs-300w-k268-sales-fast-9d322a` from SKU `1_BO_CS_300W_K268`; D1 recorded 18 events, 1 lead, and 2 CAPI sent events.
   - Production test created and published slug `1-bo-cs-300w-k268-sales-fast-7ef131` from SKU `1_BO_CS_300W_K268`; ImageFlow job `1341f7bc-1b3e-418e-bc53-8e93c764201f` completed with 5 uploaded 4:5 R2 assets and the public page hero read back `b6a2eda3-76e0-4884-b053-da30ad80cc78`.
+  - AI landing generator template catalog is deployed: TikTok Shop, Shopee Commerce, Facebook Ads, Livestream, Combo, Flash Sale, Trust, Story, Minimal, Bold, plus existing templates.
+  - Each template now passes conversion angle, visual style, proof policy, and 5 slot-specific 4:5 frame specs to ImageFlow/CDP.
+  - Conversion blocks such as discount, sold count, rating/reviews, countdown, testimonials, voucher, and gift are preserved for conversion but only render values from real Product Core/CRM/campaign data.
+  - Production test created and published slug `1-bo-cs-300w-k268-tiktok-shop-05043c` from SKU `1_BO_CS_300W_K268`; ImageFlow job `e0f572a6-c393-4c2d-9bb6-10f1fee7a3ad` rendered 5 assets with template `tiktok_shop`, 5 image slots, and `templateBlueprint` in `promptJson`.
+  - Visual QA approved 2 correct K268 assets and rejected 3 incorrect/over-claimed assets. Public page now uses only approved assets `70fcbad6-3a28-4804-8a66-1f4cd8d27b4d` and `f1c49ed3-eb07-42ec-97b6-bd09e17d29ca`.
 - ImageFlow bridge initial module added:
   - UI route `/imageflow-bridge` creates image jobs from real synced products.
   - Mobile and tablet/PC are separate layouts, not one squeezed responsive table.
@@ -143,9 +152,21 @@ Last updated: 2026-06-05
   - `/ads`: mobile, tablet, desktop, no horizontal overflow.
   - `/lp/1-bo-cs-300w-k268-sales-fast-9d322a`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow.
   - `/lp/1-bo-cs-300w-k268-sales-fast-7ef131`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow; 5 ImageFlow images render; lead form and CTA visible.
-  - `/lp/1-bo-cs-300w-k268-sales-fast-35f1ff`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow after splitting mobile and tablet/PC layouts; ImageFlow assets render; AI H1 read back as `Kiểm Soát Nguồn Điện 300W Mạnh Mẽ: An Toàn, Hiệu Quả Cho Mọi Dự Án`.
+  - `/lp/1-bo-cs-300w-k268-sales-fast-35f1ff`: mobile 390x844, tablet 820x1180, desktop 1366x900, no horizontal overflow after splitting mobile and tablet/PC layouts; ImageFlow assets render; the old wrong AI H1 was `Kiểm Soát Nguồn Điện 300W Mạnh Mẽ: An Toàn, Hiệu Quả Cho Mọi Dự Án`.
   - After refactor deploy `7f5d7762-a994-4bc4-b7b6-5df24ec9f7e3`, the same public landing page was rechecked at mobile/tablet/desktop and still had no horizontal overflow. Non-critical below-fold images now use lazy loading.
   - After frame-spec deploy `c107ff27-831f-4394-8aec-d160c5c2bd53`, production `POST /api/imageflow/jobs` created verification job `0a865403-0739-4524-8b15-175739f9a05d`; readback confirmed `promptJson.frameSpec.output={aspectRatio:"4:5",width:1080,height:1350,count:3}` and first slot role `album_cover`.
+  - After deploy `3550cf27-5eca-4347-b131-9670b3103d74`, `/lp/1-bo-cs-300w-k268-sales-fast-35f1ff` was rechecked with visible Chrome profile `fbshv-meta`: mobile 390x844, tablet 820x1180, and desktop 1366x900 all had no horizontal overflow; visible hero image kept 4:5 ratio; CTA was visible.
+  - Production `POST /api/imageflow/jobs` created verification job `8d96b483-f3b9-4faf-92b9-97f087d3c305` for SKU `1_MUIKHOAN_10MM_K265`; readback confirmed `images=7`, `promptAssets=7`, `variants=1`, `hasLandingCopy=true`, then the job was cancelled to avoid local render.
+  - After deploy `7810f8e7-c1fd-4147-b266-63c41283a5e3`, D1 production row `35f1ff9b-e6cb-42d4-ab98-faed76a5a9c6` was updated so `/lp/1-bo-cs-300w-k268-sales-fast-35f1ff` now reads `CS 300W K268 - bộ điều khiển quạt đủ mạch, bảng nút và remote`. Visible Chrome profile `fbshv-meta` confirmed:
+    - Mobile `390x844`: no horizontal overflow, H1 3 lines, hero image `320x400`, price/offer/stock visible.
+    - Tablet `820x1180`: no horizontal overflow, H1 2 lines, hero image `280x350`, price/offer/stock visible.
+    - Desktop `1366x900`: no horizontal overflow, H1 2 lines, hero image `300x375`, price/offer/stock visible.
+    - Page includes fan-compatibility section `Các loại quạt cần kiểm trước khi lắp` and real-metric section `Đánh giá & lượt quan tâm`.
+  - ImageFlow job `6fede57e-c6bd-4a90-9c39-10e772a04a0e` was rendered for the same page and uploaded 5 R2 assets, then was rejected and marked `failed` after visual QA because two generated frames changed the real K268 PCB/remote/button-panel identity. HTML readback confirmed the rejected asset IDs were no longer used by production.
+  - After deploy `ca8f4da9-47e7-44d7-a36c-d9d18e9c2317`, the stricter source-photo render guard is live on Worker and in the local adapter script.
+  - After deploy `4c84f434-34ae-4b16-92af-857fbe24b7fc`, `/landing-pages` was rechecked with visible Chrome profile `fbshv-meta`; template selection shows `Storyboard CDP: TikTok Shop`, all 5 ImageFlow/CDP 4:5 slots, and the real-data-only proof rule.
+  - Public page `/lp/1-bo-cs-300w-k268-tiktok-shop-05043c` was created, published, and checked at mobile `390x844`, tablet `820x1180`, and desktop `1366x900`; all had no horizontal overflow, showed real price/discount/stock/CTA, and did not show fake sample sold/review values.
+  - Production ImageFlow job `e0f572a6-c393-4c2d-9bb6-10f1fee7a3ad` was rendered by the local ImageFlow/CDP bridge and uploaded 5 assets. QA approved 2 and rejected 3. Next step is to improve source references/prompt path so future runs produce 5/5 acceptable frames.
 
 ## Do Not Commit
 
@@ -158,8 +179,19 @@ Last updated: 2026-06-05
 
 ## Open Follow-Up
 
+- 2026-06-06 landing-page AI template catalog is production-verified and waiting for local ImageFlow render:
+  - Feature index added at `docs/FEATURE-PROGRESS.md`.
+  - Current handoff added at `docs/handoff/2026-06-06-landing-page-ui-imageflow.md` and linked from `docs/handoff/LATEST.md`.
+  - `src/components/landing-pages/public/landing-page-commerce-top.tsx` has been adjusted so mobile, tablet, and desktop use separate hero breakpoints and larger fixed 4:5 image frames.
+  - ImageFlow prompt/package context was tightened: product cache preserves variant images; ImageFlow job context merges Product Core SKU and id/SKU detail; landing jobs pass `hero`, `sections`, and `seo` copy; adapter keeps variants/landing copy and records `sourceImageCount`, `remoteImageCount`, `variantCount`, and `productPackagePath` in the manifest.
+  - Local ImageFlow prepare proof: SKU `1_BO_CS_300W_K268` produced package `localCount=1`, `remoteCount=1`, `variantCount=1` because upstream currently exposes one image; SKU `1_MUIKHOAN_10MM_K265` produced package `localCount=7`, `remoteCount=7`, `descLen=3127`, `variantCount=1`.
+  - Direct external Product Core production readback for SKU `1_BO_CS_300W_K268` returned `images=1`, `promptAssets=1`, `variants=0`, `descriptionLength=0`; this is the current source-data blocker for generating accurate install/compatibility images without product hallucination.
+  - `npm run typecheck`, `npm run lint`, `node --check scripts/imageflow-crm-adapter.mjs`, `npm run size:check`, `npm run hygiene:check`, `npm run build:cloudflare`, and `npm run cloudflare:check` passed after the UI/context edit.
+  - Deployed Worker version `4c84f434-34ae-4b16-92af-857fbe24b7fc` after verifying Cloudflare account `3d1e8c3bd1f4f9ace7388e60dd11fbed`.
+  - Production Chrome verification passed at 390x844, 820x1180, and 1366x900 for `/lp/1-bo-cs-300w-k268-tiktok-shop-05043c`.
+  - ImageFlow job `e0f572a6-c393-4c2d-9bb6-10f1fee7a3ad` was rendered by the local watcher. It uploaded 5 images; 2 were approved and 3 were rejected after visual QA. Public page readback confirmed only approved imageflow asset IDs are used.
 - `META_TEST_EVENT_CODE` is optional and not configured. Add it later only if Events Manager test-event diagnostics are needed.
 - The CAPI token source is the current active encrypted Meta connection token. If the Facebook connection is rotated or expires, refresh Facebook connection and update `META_CAPI_ACCESS_TOKEN` accordingly.
 - Landing Page currently has one active variant per page. The schema supports variants, but full A/B traffic splitting and AI copy generation UI are still future work.
 - ImageFlow local bridge is production-verified for CRM upload. If a future ImageFlow local queue is busy, CRM jobs should stay `needs_user` with the sanitized queue reason and be retried after the local queue is idle.
-- Latest FBSHV deploy: Cloudflare Worker version `c107ff27-831f-4394-8aec-d160c5c2bd53`.
+- Latest FBSHV deploy: Cloudflare Worker version `4c84f434-34ae-4b16-92af-857fbe24b7fc`.

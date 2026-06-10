@@ -11,8 +11,15 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultCommand = `node "${path.join(scriptDir, "imageflow-crm-adapter.mjs")}"`;
 const command = process.env.IMAGEFLOW_COMMAND || defaultCommand;
 const workerId = process.env.IMAGEFLOW_WORKER_ID || `imageflow-local-${process.env.COMPUTERNAME || "windows"}`;
-const once = process.argv.includes("--once");
+const watch =
+  process.argv.includes("--watch") ||
+  process.env.IMAGEFLOW_BRIDGE_MODE === "watch" ||
+  process.env.IMAGEFLOW_BRIDGE_WATCH === "true";
+const once = process.argv.includes("--once") || !watch;
 const intervalMs = Number(process.env.IMAGEFLOW_POLL_INTERVAL_MS || 15000);
+const adapterTimeoutMs = Number(process.env.IMAGEFLOW_ADAPTER_TIMEOUT_MS || 10 * 60 * 1000);
+let tickRunning = false;
+let emptyCount = 0;
 
 function log(message) {
   process.stdout.write(`[imageflow-bridge] ${message}\n`);
@@ -21,6 +28,23 @@ function log(message) {
 function sanitizeError(error) {
   const text = error instanceof Error ? error.message : String(error);
   return text.replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer ***").replace(token, "***");
+}
+
+function statusForLocalError(message) {
+  const normalized = message.toLowerCase();
+  const recoverableMarkers = [
+    "queue is busy",
+    "queue is already running",
+    "pipeline lock",
+    "profile",
+    "session",
+    "login",
+    "cdp",
+    "no prompt profile",
+    "no render profile",
+    "cannot start imageflow"
+  ];
+  return recoverableMarkers.some((marker) => normalized.includes(marker)) ? "needs_user" : "failed";
 }
 
 async function crmFetch(pathname, init = {}) {
@@ -75,7 +99,7 @@ async function uploadAsset(jobId, filePath, assetIndex, promptJson) {
   const form = new FormData();
   form.set("file", new Blob([bytes], { type: mimeFor(filePath) }), path.basename(filePath));
   form.set("assetIndex", String(assetIndex));
-  form.set("role", "album_image");
+  form.set("role", String(promptJson?.role || "album_image"));
   if (promptJson) form.set("promptJson", JSON.stringify(promptJson));
   await crmFetch(`/api/imageflow/jobs/${jobId}/assets`, { method: "POST", body: form });
 }
@@ -96,6 +120,7 @@ async function findImages(outputDir) {
 async function runImageflowCommand(jobFile, outputDir) {
   if (!command.trim()) return { configured: false };
   return new Promise((resolve, reject) => {
+    let settled = false;
     const child = spawn(command, {
       shell: true,
       stdio: "inherit",
@@ -106,8 +131,20 @@ async function runImageflowCommand(jobFile, outputDir) {
         IMAGEFLOW_OUTPUT_DIR: outputDir
       }
     });
-    child.on("exit", (code) => (code === 0 ? resolve({ configured: true }) : reject(new Error(`IMAGEFLOW_COMMAND exited ${code}`))));
-    child.on("error", reject);
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      child.kill();
+      finish(() => reject(new Error(`adapter_timeout: ImageFlow adapter did not finish within ${adapterTimeoutMs}ms`)));
+    }, Math.max(60_000, adapterTimeoutMs));
+    child.on("exit", (code) =>
+      finish(() => (code === 0 ? resolve({ configured: true }) : reject(new Error(`IMAGEFLOW_COMMAND exited ${code}`))))
+    );
+    child.on("error", (error) => finish(() => reject(error)));
   });
 }
 
@@ -124,7 +161,7 @@ async function processJob(job) {
   } catch (error) {
     const message = sanitizeError(error);
     await patchJob(job.id, {
-      status: message.toLowerCase().includes("queue is busy") ? "needs_user" : "failed",
+      status: statusForLocalError(message),
       error: message
     });
     log(`job ${job.id} failed: ${message}`);
@@ -148,27 +185,42 @@ async function processJob(job) {
     : await findImages(outputDir);
 
   for (let index = 0; index < imagePaths.length; index += 1) {
-    await uploadAsset(job.id, imagePaths[index], index, manifestImages[index]?.prompt || null);
+    const manifestItem = manifestImages[index] || {};
+    await uploadAsset(job.id, imagePaths[index], index, { ...(manifestItem.prompt || {}), role: manifestItem.role });
   }
 
+  const needsReview = job.targetFormat === "landing_page";
   await patchJob(job.id, {
-    status: "completed",
-    resultManifestJson: { ...manifest, uploadedCount: imagePaths.length, completedBy: workerId }
+    status: needsReview ? "needs_user" : "completed",
+    error: needsReview ? `Ảnh đã về CRM. Cần duyệt ảnh trong màn hình Cầu nối ảnh AI trước khi dùng trên landing page.` : null,
+    resultManifestJson: { ...manifest, uploadedCount: imagePaths.length, completedBy: workerId, reviewRequired: needsReview }
   });
-  log(`job ${job.id} completed, uploaded ${imagePaths.length} image(s)`);
+  log(`job ${job.id} ${needsReview ? "waiting for review" : "completed"}, uploaded ${imagePaths.length} image(s)`);
 }
 
 async function tick() {
+  if (tickRunning) {
+    log("previous poll is still running; skip overlapping claim");
+    return "skipped";
+  }
+  tickRunning = true;
   try {
     const job = await claimJob();
     if (!job) {
-      log("no queued job");
-      return;
+      emptyCount += 1;
+      log(`no queued job (empty streak: ${emptyCount})`);
+      return "empty";
     }
+    emptyCount = 0;
     log(`claimed job ${job.id} for SKU ${job.productSku}`);
     await processJob(job);
+    return "processed";
   } catch (error) {
+    emptyCount = 0;
     log(sanitizeError(error));
+    return "error";
+  } finally {
+    tickRunning = false;
   }
 }
 
@@ -176,6 +228,13 @@ await mkdir(workDir, { recursive: true });
 if (once) {
   await tick();
 } else {
-  await tick();
-  setInterval(tick, Number.isFinite(intervalMs) ? Math.max(5000, intervalMs) : 15000);
+  const delayMs = Number.isFinite(intervalMs) ? Math.max(5000, intervalMs) : 15000;
+  while (watch) {
+    const result = await tick();
+    const waitMs =
+      result === "empty" && emptyCount > 0
+        ? Math.min(delayMs * emptyCount, 120_000)
+        : delayMs;
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
 }

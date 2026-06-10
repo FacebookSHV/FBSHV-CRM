@@ -9,6 +9,7 @@ import type {
   ProductQuery,
   ProductWithInventory
 } from "./types";
+import { ExternalCoreClient } from "@/lib/core-flow/external-core-client";
 
 type HttpProviderOptions = {
   baseUrl: string;
@@ -34,27 +35,15 @@ function normalizePricePayload(sku: string, payload: ExternalPricePayload) {
 }
 
 export class HttpEcommerceManagementProvider implements EcommerceManagementProvider {
-  constructor(private readonly options: HttpProviderOptions) {}
+  private readonly client: ExternalCoreClient;
+
+  constructor(private readonly options: HttpProviderOptions) {
+    this.client = new ExternalCoreClient(options);
+  }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<ApiResult<T>> {
-    const url = new URL(path, this.options.baseUrl);
-    const response = await fetch(url, {
-      ...init,
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${this.options.apiKey}`,
-        ...(init.headers ?? {})
-      }
-    });
-    const payload = (await response.json().catch(() => null)) as ApiResult<T> | null;
-
-    if (!response.ok) {
-      return {
-        success: false,
-        error: payload?.success === false ? payload.error : "API TMĐT trả lỗi"
-      };
-    }
-    return payload ?? { success: false, error: "API TMĐT trả dữ liệu không hợp lệ" };
+    // NEO: External Core calls fail fast with timeout/retry/circuit breaker, không treo request CRM.
+    return this.client.request<T>(path, init);
   }
 
   getProducts(params: ProductQuery = {}) {

@@ -2,11 +2,18 @@ import { getFacebookRuntimeConfigAsync } from "./env";
 import { blockedMetaPermission, withMetaPermission } from "./permissions";
 import { getFacebookStore } from "./store";
 import { decryptToken } from "./token-crypto";
+import { isAutoPublishRuntimeEnabled } from "@/lib/content-runtime";
 
 type PublishInput = {
   pageId: string;
   message: string;
   link?: string;
+};
+
+type AlbumPublishInput = {
+  pageId: string;
+  message: string;
+  mediaUrls: string[];
 };
 
 function graphUrl(version: string, path: string) {
@@ -15,7 +22,7 @@ function graphUrl(version: string, path: string) {
 
 async function getPageToken(pageId: string) {
   const config = await getFacebookRuntimeConfigAsync();
-  if (process.env.AUTO_PUBLISH_POSTS_ENABLED !== "true") {
+  if (!(await isAutoPublishRuntimeEnabled())) {
     throw new Error("AUTO_PUBLISH_POSTS_DISABLED");
   }
 
@@ -53,6 +60,17 @@ async function postToGraph(input: PublishInput, path: "feed" | "photos" | "video
   });
 }
 
+async function graphPostJson<T>(url: URL, body: Record<string, unknown>): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const payload = (await response.json().catch(() => ({}))) as T & { error?: { message?: string } };
+  if (!response.ok || payload.error) throw new Error(payload.error?.message || "Meta publish lỗi.");
+  return payload;
+}
+
 export function schedulePagePost(input: PublishInput & { scheduledAt: string }) {
   return {
     ...input,
@@ -70,4 +88,29 @@ export function publishPhotoPost(input: PublishInput) {
 
 export function publishVideoPost(input: PublishInput) {
   return postToGraph(input, "videos");
+}
+
+export async function createAlbumPost(input: AlbumPublishInput) {
+  const page = await getPageToken(input.pageId);
+  const mediaUrls = [...new Set(input.mediaUrls.map((item) => item.trim()).filter(Boolean))].slice(0, 10);
+  if (mediaUrls.length === 0) throw new Error("CONTENT_MEDIA_REQUIRED: Bài album cần ít nhất 1 ảnh.");
+
+  return withMetaPermission("pages_manage_posts", async () => {
+    const uploaded: string[] = [];
+    for (const mediaUrl of mediaUrls) {
+      const photoUrl = new URL(graphUrl(page.graphApiVersion, `/${encodeURIComponent(page.externalPageId)}/photos`));
+      photoUrl.searchParams.set("access_token", page.token);
+      const photo = await graphPostJson<{ id?: string }>(photoUrl, { url: mediaUrl, published: false });
+      if (photo.id) uploaded.push(photo.id);
+    }
+    if (uploaded.length === 0) throw new Error("CONTENT_MEDIA_UPLOAD_FAILED: Meta không trả media_fbid cho album.");
+
+    const feedUrl = new URL(graphUrl(page.graphApiVersion, `/${encodeURIComponent(page.externalPageId)}/feed`));
+    feedUrl.searchParams.set("access_token", page.token);
+    const post = await graphPostJson<{ id?: string }>(feedUrl, {
+      message: input.message,
+      attached_media: uploaded.map((mediaFbid) => ({ media_fbid: mediaFbid }))
+    });
+    return { externalPostId: post.id || uploaded[0] || "" };
+  });
 }

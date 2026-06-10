@@ -1,12 +1,14 @@
-"use client";
+﻿"use client";
 
-import { Cable, CheckCircle2, Clock3, ImagePlus, Loader2, Play, RefreshCw, ShieldAlert, Sparkles, UploadCloud } from "lucide-react";
+import { Cable, CheckCircle2, Clock3, ImagePlus, Loader2, Play, RefreshCw, ShieldAlert, Sparkles, UploadCloud, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/pages/page-header";
 import { StatusPill } from "@/components/ui/status-pill";
+import { ImageflowJobTable } from "./imageflow-job-table";
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
-import type { ImageflowJob, ImageflowJobStatus } from "@/lib/imageflow/types";
+import type { ImageflowAsset, ImageflowAssetStatus, ImageflowJob, ImageflowJobStatus } from "@/lib/imageflow/types";
 import { formatMoney } from "@/lib/money";
+import { buildFacebookFrameSpec, facebookImagePresets, type FacebookImagePlacement, type FacebookImagePreset } from "./facebook-image-presets";
 
 type ApiEnvelope<T> = { success: true; data: T } | { success: false; error?: string };
 
@@ -46,43 +48,43 @@ function shortDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-function productName(product?: ProductWithInventory | null, sku?: string) {
-  return product?.name || sku || "Chưa chọn sản phẩm";
-}
-
 function assetCount(job: ImageflowJob) {
   return job.assets?.length ?? 0;
 }
 
-const facebookAlbumFrameSpec = {
-  output: { aspectRatio: "4:5", width: 1080, height: 1350 },
-  safeArea: {
-    contentInsetPercent: 8,
-    noTextWithinPercentFromEdge: 10,
-    keepMainProductInsidePercent: 88
-  },
-  slots: [
-    { index: 0, role: "album_cover", frame: "4:5 cover", instruction: "Ảnh bìa phải khớp khung 1080x1350, sản phẩm rõ, không cắt mép." },
-    { index: 1, role: "problem_solution", frame: "4:5 pain point", instruction: "Hook nỗi đau + giải pháp, chữ lớn ít dòng, còn khoảng trắng an toàn." },
-    { index: 2, role: "feature_detail", frame: "4:5 feature", instruction: "Cận cảnh tính năng hoặc chi tiết sản phẩm, không crop phần chính." },
-    { index: 3, role: "how_to_use", frame: "4:5 instruction", instruction: "Thể hiện thao tác dùng/lắp đặt, bố cục thoáng, dễ hiểu trên mobile." },
-    { index: 4, role: "trust_offer", frame: "4:5 trust/offer", instruction: "Ảnh chốt niềm tin hoặc ưu đãi, không nhồi nhiều chữ nhỏ." }
-  ],
-  negativePrompt: [
-    "Không tạo ảnh vuông/ngang.",
-    "Không để chữ hoặc sản phẩm chạm mép.",
-    "Không crop mất sản phẩm chính.",
-    "Không dùng text nhỏ dày đặc.",
-    "Không tạo poster rối nhiều khung cảnh báo."
-  ]
-};
+function assetStatusLabel(status: ImageflowAssetStatus | string) {
+  if (status === "approved") return "Đã duyệt";
+  if (status === "rejected") return "Đã loại";
+  if (status === "needs_review") return "Cần duyệt";
+  return "Đã upload";
+}
+
+function assetStatusTone(status: ImageflowAssetStatus | string): "success" | "warning" | "danger" | "info" | "neutral" {
+  if (status === "approved") return "success";
+  if (status === "rejected") return "danger";
+  if (status === "needs_review") return "warning";
+  return "info";
+}
+
+function imageflowAssetCounts(job: ImageflowJob) {
+  const assets = job.assets ?? [];
+  return {
+    approved: assets.filter((asset) => asset.status === "approved").length,
+    needsReview: assets.filter((asset) => asset.status === "needs_review").length,
+    rejected: assets.filter((asset) => asset.status === "rejected").length
+  };
+}
 
 export function ImageflowBridgeContent({ initialJobs, products }: Props) {
   const [jobs, setJobs] = useState(initialJobs);
   const [selectedSku, setSelectedSku] = useState(products[0]?.sku ?? "");
-  const [requestedCount, setRequestedCount] = useState(5);
+  const [selectedPlacement, setSelectedPlacement] = useState<FacebookImagePlacement>("feed");
+  const [requestedCount, setRequestedCount] = useState(facebookImagePresets.feed.defaultCount);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("Chọn sản phẩm thật đã đồng bộ để tạo job ảnh 4:5 cho album Facebook.");
+  const [reviewingAssetId, setReviewingAssetId] = useState<string | null>(null);
+  const [message, setMessage] = useState("Chọn sản phẩm thật đã đồng bộ để tạo ảnh đúng từng vị trí Facebook: Feed, Banner, Story hoặc Logo.");
+
+  const selectedPreset = facebookImagePresets[selectedPlacement];
 
   const selectedProduct = useMemo(
     () => products.find((product) => product.sku === selectedSku) ?? null,
@@ -101,35 +103,71 @@ export function ImageflowBridgeContent({ initialJobs, products }: Props) {
       return;
     }
     setBusy(true);
+    const safeCount = selectedPreset.countOptions.includes(requestedCount) ? requestedCount : selectedPreset.defaultCount;
+    const frameSpec = buildFacebookFrameSpec(selectedPreset, safeCount);
     const promptJson = {
-      channel: "facebook_page_album",
-      creativeGoal: "Tạo bộ ảnh bán hàng và hướng dẫn thao tác thật",
-      imageStyle: "Ảnh sản phẩm rõ ràng, sáng sạch, không chữ nhỏ khó đọc",
-      output: { aspectRatio: "4:5", width: 1080, height: 1350, count: requestedCount },
-      frameSpec: { ...facebookAlbumFrameSpec, output: { ...facebookAlbumFrameSpec.output, count: requestedCount } }
+      channel: "facebook_ads",
+      placement: selectedPreset.key,
+      localPipeline: "facebook_ads",
+      targetFormat: selectedPreset.targetFormat,
+      creativeGoal: "Tạo ảnh Facebook từ dữ liệu sản phẩm thật và ảnh tham chiếu thật, không bịa claim.",
+      imageStyle: "Ảnh quảng cáo thương mại điện tử sạch, dễ đọc trên mobile, giữ đúng sản phẩm.",
+      output: { aspectRatio: selectedPreset.aspectRatio, width: selectedPreset.width, height: selectedPreset.height, count: safeCount },
+      claimPolicy: {
+        sourceOfTruth: "Product Core detail, product images, variants and landing copy from CRM.",
+        allowed: ["Chỉ dùng claim được dữ liệu Product Core, ảnh, biến thể, giá, tồn hoặc campaign thật hỗ trợ."],
+        forbidden: [
+          "Không bịa vật liệu tương thích, cách dùng, đánh giá, lượt bán, lời chứng thực, đếm ngược, bảo hành hoặc giảm giá.",
+          "Không giữ lại claim cũ nếu Product Core không hỗ trợ.",
+          "Không đổi danh mục, model, linh kiện, nhãn, màu, bao bì hoặc phụ kiện thật của sản phẩm."
+        ]
+      },
+      frameSpec
     };
     const response = await fetch("/api/imageflow/jobs", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         productSku: selectedProduct.sku,
-        title: `Album Facebook - ${selectedProduct.name}`,
-        targetFormat: "facebook_album",
-        targetAspectRatio: "4:5",
-        outputWidth: 1080,
-        outputHeight: 1350,
-        requestedCount,
+        title: `${selectedPreset.label} Facebook - ${selectedProduct.name}`,
+        targetFormat: selectedPreset.targetFormat,
+        targetAspectRatio: selectedPreset.aspectRatio,
+        outputWidth: selectedPreset.width,
+        outputHeight: selectedPreset.height,
+        requestedCount: safeCount,
         promptJson
       })
     });
     const payload = (await response.json().catch(() => null)) as ApiEnvelope<ImageflowJob> | null;
     if (response.ok && payload?.success) {
       setJobs((current) => [payload.data, ...current.filter((job) => job.id !== payload.data.id)]);
-      setMessage("Đã tạo job. Cầu nối local sẽ kéo job này về ImageFlow để render ảnh thật.");
+      setMessage(`Đã tạo job ${selectedPreset.label}. Cầu nối local sẽ đẩy vào pipeline Facebook Ads của ImageFlow.`);
     } else {
       setMessage(payload && !payload.success ? payload.error ?? "Tạo job ImageFlow lỗi." : "Tạo job ImageFlow lỗi.");
     }
     setBusy(false);
+  }
+
+  async function reviewAsset(assetId: string, status: "approved" | "rejected") {
+    setReviewingAssetId(assetId);
+    const response = await fetch(`/api/imageflow/assets/${assetId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status })
+    });
+    const payload = (await response.json().catch(() => null)) as ApiEnvelope<ImageflowAsset> | null;
+    if (response.ok && payload?.success) {
+      setJobs((current) =>
+        current.map((job) => ({
+          ...job,
+          assets: job.assets?.map((asset) => (asset.id === payload.data.id ? payload.data : asset)) ?? []
+        }))
+      );
+      setMessage(status === "approved" ? "Đã duyệt ảnh. Landing page chỉ dùng ảnh đã duyệt." : "Đã loại ảnh khỏi nhóm được phép dùng.");
+    } else {
+      setMessage(payload && !payload.success ? payload.error ?? "Duyệt ảnh không thành công." : "Duyệt ảnh không thành công.");
+    }
+    setReviewingAssetId(null);
   }
 
   const stats = {
@@ -145,13 +183,22 @@ export function ImageflowBridgeContent({ initialJobs, products }: Props) {
       products={products}
       selectedSku={selectedSku}
       selectedProduct={selectedProduct}
+      selectedPlacement={selectedPlacement}
+      selectedPreset={selectedPreset}
       requestedCount={requestedCount}
       busy={busy}
       message={message}
       onSkuChange={setSelectedSku}
+      onPlacementChange={(placement) => {
+        const preset = facebookImagePresets[placement];
+        setSelectedPlacement(placement);
+        setRequestedCount(preset.defaultCount);
+      }}
       onRequestedCountChange={setRequestedCount}
       onCreateJob={() => void createJob()}
       onReload={() => void reloadJobs()}
+      onReviewAsset={(assetId, status) => void reviewAsset(assetId, status)}
+      reviewingAssetId={reviewingAssetId}
     />
   );
 
@@ -161,14 +208,23 @@ export function ImageflowBridgeContent({ initialJobs, products }: Props) {
       products={products}
       selectedSku={selectedSku}
       selectedProduct={selectedProduct}
+      selectedPlacement={selectedPlacement}
+      selectedPreset={selectedPreset}
       requestedCount={requestedCount}
       busy={busy}
       message={message}
       stats={stats}
       onSkuChange={setSelectedSku}
+      onPlacementChange={(placement) => {
+        const preset = facebookImagePresets[placement];
+        setSelectedPlacement(placement);
+        setRequestedCount(preset.defaultCount);
+      }}
       onRequestedCountChange={setRequestedCount}
       onCreateJob={() => void createJob()}
       onReload={() => void reloadJobs()}
+      onReviewAsset={(assetId, status) => void reviewAsset(assetId, status)}
+      reviewingAssetId={reviewingAssetId}
     />
   );
 
@@ -176,7 +232,7 @@ export function ImageflowBridgeContent({ initialJobs, products }: Props) {
     <div>
       <PageHeader
         title="Cầu nối ảnh AI"
-        subtitle="Kết nối CRM production với ImageFlow local: CRM tạo job từ sản phẩm thật, local render ảnh 4:5, rồi upload ảnh về R2 để Content Planner đăng album Facebook."
+        subtitle="Kết nối CRM production với ImageFlow local: CRM tạo job từ sản phẩm thật, local render ảnh đúng từng vị trí Facebook, rồi upload ảnh về R2 để Content Planner dùng cho bài đăng/quảng cáo."
         action={
           <button
             type="button"
@@ -199,36 +255,47 @@ function ImageflowMobileView({
   products,
   selectedSku,
   selectedProduct,
+  selectedPlacement,
+  selectedPreset,
   requestedCount,
   busy,
   message,
   onSkuChange,
+  onPlacementChange,
   onRequestedCountChange,
   onCreateJob,
-  onReload
+  onReload,
+  onReviewAsset,
+  reviewingAssetId
 }: {
   jobs: ImageflowJob[];
   products: ProductWithInventory[];
   selectedSku: string;
   selectedProduct: ProductWithInventory | null;
+  selectedPlacement: FacebookImagePlacement;
+  selectedPreset: FacebookImagePreset;
   requestedCount: number;
   busy: boolean;
   message: string;
   onSkuChange: (sku: string) => void;
+  onPlacementChange: (placement: FacebookImagePlacement) => void;
   onRequestedCountChange: (count: number) => void;
   onCreateJob: () => void;
   onReload: () => void;
+  onReviewAsset: (assetId: string, status: "approved" | "rejected") => void;
+  reviewingAssetId: string | null;
 }) {
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center gap-2 text-sm font-bold text-slate-950">
           <ImagePlus className="h-5 w-5 text-brand-600" aria-hidden="true" />
-          Tạo job album 4:5
+          Tạo ảnh Facebook
         </div>
         <div className="mt-4 space-y-3">
           <ProductSelect products={products} selectedSku={selectedSku} onChange={onSkuChange} />
-          <CountSelect value={requestedCount} onChange={onRequestedCountChange} />
+          <PlacementSelect value={selectedPlacement} onChange={onPlacementChange} />
+          <CountSelect preset={selectedPreset} value={requestedCount} onChange={onRequestedCountChange} />
           {selectedProduct ? <ProductSummary product={selectedProduct} /> : <EmptyProductState />}
           <button
             type="button"
@@ -251,7 +318,7 @@ function ImageflowMobileView({
             Cập nhật
           </button>
         </div>
-        {jobs.length ? jobs.map((job) => <MobileJobCard key={job.id} job={job} />) : <NoJobsState />}
+        {jobs.length ? jobs.map((job) => <MobileJobCard key={job.id} job={job} onReviewAsset={onReviewAsset} reviewingAssetId={reviewingAssetId} />) : <NoJobsState />}
       </section>
     </div>
   );
@@ -262,27 +329,37 @@ function ImageflowDesktopView({
   products,
   selectedSku,
   selectedProduct,
+  selectedPlacement,
+  selectedPreset,
   requestedCount,
   busy,
   message,
   stats,
   onSkuChange,
+  onPlacementChange,
   onRequestedCountChange,
   onCreateJob,
-  onReload
+  onReload,
+  onReviewAsset,
+  reviewingAssetId
 }: {
   jobs: ImageflowJob[];
   products: ProductWithInventory[];
   selectedSku: string;
   selectedProduct: ProductWithInventory | null;
+  selectedPlacement: FacebookImagePlacement;
+  selectedPreset: FacebookImagePreset;
   requestedCount: number;
   busy: boolean;
   message: string;
   stats: { queued: number; running: number; needsUser: number; completed: number };
   onSkuChange: (sku: string) => void;
+  onPlacementChange: (placement: FacebookImagePlacement) => void;
   onRequestedCountChange: (count: number) => void;
   onCreateJob: () => void;
   onReload: () => void;
+  onReviewAsset: (assetId: string, status: "approved" | "rejected") => void;
+  reviewingAssetId: string | null;
 }) {
   return (
     <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -305,7 +382,7 @@ function ImageflowDesktopView({
               Làm mới
             </button>
           </div>
-          {jobs.length ? <JobsTable jobs={jobs} /> : <NoJobsState />}
+          {jobs.length ? <ImageflowJobTable jobs={jobs} onReviewAsset={onReviewAsset} reviewingAssetId={reviewingAssetId} /> : <NoJobsState />}
         </section>
       </main>
 
@@ -317,7 +394,8 @@ function ImageflowDesktopView({
           </div>
           <div className="mt-4 space-y-3">
             <ProductSelect products={products} selectedSku={selectedSku} onChange={onSkuChange} />
-            <CountSelect value={requestedCount} onChange={onRequestedCountChange} />
+            <PlacementSelect value={selectedPlacement} onChange={onPlacementChange} />
+            <CountSelect preset={selectedPreset} value={requestedCount} onChange={onRequestedCountChange} />
             {selectedProduct ? <ProductSummary product={selectedProduct} /> : <EmptyProductState />}
             <button
               type="button"
@@ -326,7 +404,7 @@ function ImageflowDesktopView({
               className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-bold text-white focus-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
-              Tạo job 4:5
+              Tạo job {selectedPreset.label}
             </button>
           </div>
           <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-600">{message}</p>
@@ -372,18 +450,38 @@ function ProductSelect({ products, selectedSku, onChange }: { products: ProductW
   );
 }
 
-function CountSelect({ value, onChange }: { value: number; onChange: (count: number) => void }) {
+function PlacementSelect({ value, onChange }: { value: FacebookImagePlacement; onChange: (placement: FacebookImagePlacement) => void }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-slate-700">Số ảnh album</span>
+      <span className="text-sm font-medium text-slate-700">Vị trí ảnh Facebook</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as FacebookImagePlacement)}
+        className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus-ring"
+      >
+        {(Object.values(facebookImagePresets) as FacebookImagePreset[]).map((preset) => (
+          <option key={preset.key} value={preset.key}>
+            {preset.label} - {preset.width}x{preset.height}
+          </option>
+        ))}
+      </select>
+      <span className="mt-1 block text-xs leading-5 text-slate-500">{facebookImagePresets[value].description}</span>
+    </label>
+  );
+}
+
+function CountSelect({ preset, value, onChange }: { preset: FacebookImagePreset; value: number; onChange: (count: number) => void }) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">Số ảnh cần tạo</span>
       <select
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
         className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus-ring"
       >
-        {[3, 4, 5, 6, 8].map((count) => (
+        {preset.countOptions.map((count) => (
           <option key={count} value={count}>
-            {count} ảnh tỷ lệ 4:5
+            {count} ảnh · {preset.aspectRatio} · {preset.width}x{preset.height}
           </option>
         ))}
       </select>
@@ -419,7 +517,73 @@ function EmptyProductState() {
   );
 }
 
-function MobileJobCard({ job }: { job: ImageflowJob }) {
+function AssetReviewStrip({
+  assets,
+  onReviewAsset,
+  reviewingAssetId
+}: {
+  assets: ImageflowAsset[];
+  onReviewAsset: (assetId: string, status: "approved" | "rejected") => void;
+  reviewingAssetId: string | null;
+}) {
+  if (!assets.length) return null;
+  return (
+    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {assets.slice(0, 6).map((asset) => {
+        const busy = reviewingAssetId === asset.id;
+        return (
+          <div key={asset.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="aspect-[4/5] bg-slate-50">
+              {asset.publicUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={asset.publicUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs font-bold text-slate-400">Chưa có ảnh</div>
+              )}
+            </div>
+            <div className="space-y-2 p-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-500">Ảnh {asset.assetIndex + 1}</span>
+                <StatusPill tone={assetStatusTone(asset.status)}>{assetStatusLabel(asset.status)}</StatusPill>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={busy || asset.status === "approved"}
+                  onClick={() => onReviewAsset(asset.id, "approved")}
+                  className="inline-flex min-h-9 items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  Dùng ảnh
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || asset.status === "rejected"}
+                  onClick={() => onReviewAsset(asset.id, "rejected")}
+                  className="inline-flex min-h-9 items-center justify-center gap-1 rounded-lg border border-rose-200 bg-white px-2 text-xs font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                  Loại
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MobileJobCard({
+  job,
+  onReviewAsset,
+  reviewingAssetId
+}: {
+  job: ImageflowJob;
+  onReviewAsset: (assetId: string, status: "approved" | "rejected") => void;
+  reviewingAssetId: string | null;
+}) {
+  const counts = imageflowAssetCounts(job);
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -443,44 +607,14 @@ function MobileJobCard({ job }: { job: ImageflowJob }) {
           <div className="mt-1 text-slate-500">Cập nhật</div>
         </div>
       </div>
+      {assetCount(job) ? (
+        <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs font-bold text-slate-600">
+          Đã duyệt {counts.approved} · Cần duyệt {counts.needsReview} · Đã loại {counts.rejected}
+        </div>
+      ) : null}
+      <AssetReviewStrip assets={job.assets ?? []} onReviewAsset={onReviewAsset} reviewingAssetId={reviewingAssetId} />
       {job.error ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-800 break-words [overflow-wrap:anywhere]">{job.error}</p> : null}
     </article>
-  );
-}
-
-function JobsTable({ jobs }: { jobs: ImageflowJob[] }) {
-  return (
-    <div className="max-w-full overflow-x-auto">
-      <table className="min-w-[720px] divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.06em] text-slate-500">
-          <tr>
-            <th className="px-4 py-3">Sản phẩm</th>
-            <th className="px-4 py-3">Trạng thái</th>
-            <th className="px-4 py-3 text-right">Ảnh</th>
-            <th className="px-4 py-3">Tỷ lệ</th>
-            <th className="px-4 py-3">Cập nhật</th>
-            <th className="px-4 py-3">Ghi chú</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 bg-white">
-          {jobs.map((job) => (
-            <tr key={job.id} className="align-top">
-              <td className="px-4 py-3">
-                <div className="font-bold text-slate-950">{productName(job.product, job.productSku)}</div>
-                <div className="mt-1 text-xs text-slate-500">SKU {job.productSku}</div>
-              </td>
-              <td className="px-4 py-3">
-                <StatusPill tone={statusTone(job.status)}>{statusLabel(job.status)}</StatusPill>
-              </td>
-              <td className="px-4 py-3 text-right tabular-nums text-slate-700">{assetCount(job)}/{job.requestedCount}</td>
-              <td className="px-4 py-3 text-slate-700">{job.targetAspectRatio} · {job.outputWidth}x{job.outputHeight}</td>
-              <td className="px-4 py-3 text-slate-700">{shortDate(job.updatedAt)}</td>
-              <td className="max-w-[280px] px-4 py-3 text-slate-600 break-words [overflow-wrap:anywhere]">{job.error || "Sẵn sàng theo dõi."}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 

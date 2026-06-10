@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, LayoutTemplate, Rocket, Send, WandSparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ExternalLink, Images, LayoutTemplate, Rocket, Send, WandSparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/pages/page-header";
 import { ProductSearchPicker } from "@/components/products/product-search-picker";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -46,6 +46,10 @@ export function LandingPagesContent({
   const [status, setStatus] = useState("Chọn sản phẩm thật đã sync để tạo landing page.");
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState(false);
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.id === templateId) ?? templates[0],
+    [templateId, templates]
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -150,7 +154,7 @@ export function LandingPagesContent({
               CRM sẽ tạo job 4:5 từ ảnh, mô tả và promptAssets thật của sản phẩm. Local ImageFlow render xong thì public landing page tự ưu tiên ảnh AI cho hero và gallery.
             </span>
           </label>
-          <div className="mt-4 grid gap-2">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {templates.map((template) => (
               <button
                 key={template.id}
@@ -162,14 +166,44 @@ export function LandingPagesContent({
                 ].join(" ")}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-bold text-slate-950">{template.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-4 w-4 rounded-full ring-1 ring-black/10" style={{ backgroundColor: template.accent }} />
+                    <div className="font-bold text-slate-950">{template.name}</div>
+                  </div>
                   {templateId === template.id ? <StatusPill tone="info">Đang chọn</StatusPill> : null}
                 </div>
                 <p className="mt-1 text-sm leading-6 text-slate-600">{template.description}</p>
                 <p className="mt-1 text-xs text-slate-500">{template.bestFor}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {template.conversionBlocks.slice(0, 3).map((block) => (
+                    <span key={block} className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">
+                      {block}
+                    </span>
+                  ))}
+                </div>
               </button>
             ))}
           </div>
+          {selectedTemplate ? (
+            <section className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center gap-2">
+                <Images className="h-5 w-5 text-brand-600" aria-hidden="true" />
+                <h3 className="text-sm font-bold text-slate-950">Storyboard CDP: {selectedTemplate.name}</h3>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{selectedTemplate.copyAngle}</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {selectedTemplate.imageSlots.map((slot) => (
+                  <div key={slot.index} className="rounded-lg bg-white p-3 ring-1 ring-slate-200">
+                    <div className="text-xs font-bold text-slate-950">{slot.index + 1}. {slot.label}</div>
+                    <div className="mt-1 text-[11px] text-slate-500">{slot.width}x{slot.height} · {slot.ratio}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-xs leading-5 text-amber-800">
+                Giảm giá, lượt bán, đánh giá, đếm ngược và lời chứng thực vẫn được giữ để tăng chuyển đổi, nhưng chỉ hiển thị khi Product Core, CRM hoặc chiến dịch có dữ liệu thật.
+              </p>
+            </section>
+          ) : null}
           <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-600">
             {status}
           </div>

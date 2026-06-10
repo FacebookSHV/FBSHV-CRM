@@ -13,6 +13,7 @@ import {
   createPublishJobs,
   isAutoPublishPostsEnabled,
   listPublishJobs,
+  publishDueContentJobs,
   resetContentPublishingMemoryForTests
 } from "@/lib/content-publishing";
 import { getAdsReadiness, publishAdDraft } from "@/lib/facebook/ads";
@@ -108,6 +109,31 @@ describe("growth modules", () => {
     expect(second).toHaveLength(2);
     expect(await listPublishJobs(post.id)).toHaveLength(2);
     expect(first.every((job) => job.dryRun)).toBe(true);
+  });
+
+  it("scheduled publish không đăng ngay và chờ ảnh ImageFlow trước khi tới giờ", async () => {
+    process.env.AUTO_PUBLISH_POSTS_ENABLED = "true";
+    const post = await createContentPost({
+      id: "post_scheduled_auto_1",
+      pageId: "page_test_growth",
+      title: "Bài tự động có lịch",
+      caption: "Nội dung thật do AI tạo từ sản phẩm",
+      status: "draft"
+    });
+    const scheduledAt = new Date(Date.now() - 60_000).toISOString();
+    const jobs = await createPublishJobs({
+      postId: post.id,
+      pageIds: ["page_test_growth"],
+      scheduledAt,
+      publishNow: true
+    });
+    expect(jobs[0]?.status).toBe("scheduled");
+    expect(jobs[0]?.dryRun).toBe(false);
+
+    const due = await publishDueContentJobs({ now: new Date().toISOString() });
+    expect(due.dueCount).toBe(1);
+    expect(due.waitingMediaCount).toBe(1);
+    expect((await listPublishJobs(post.id))[0]?.error).toBe("WAITING_IMAGEFLOW_ASSETS");
   });
 
   it("Content Planner API trả đúng publish setting để UI cảnh báo publish thật", async () => {

@@ -121,20 +121,39 @@ function normalizeVariants(input: unknown, raw: Record<string, unknown>) {
   return variants.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
 }
 
+function variantImageUrls(variants: Array<Record<string, unknown>>) {
+  const values: string[] = [];
+  for (const variant of variants) {
+    values.push(...stringArray(variant.images));
+    const imageUrl = typeof variant.imageUrl === "string" ? variant.imageUrl : typeof variant.image_url === "string" ? variant.image_url : "";
+    if (imageUrl.trim()) values.push(imageUrl.trim());
+  }
+  return uniqueStrings(values);
+}
+
 export function normalizeProductForCache(input: CacheProductInput, syncedAt = nowIso()): ProductWithInventory {
   const raw = parseJsonRecord(input.rawPayload);
   const sku = safeText(input.sku, safeText(input.id, crypto.randomUUID()));
   const availableStock = safeNumber(input.availableStock, safeNumber(input.stock, 0));
   const lowStockThreshold = safeNumber(input.lowStockThreshold, 10);
+  const variants = normalizeVariants(input.variants, raw);
+  const variantImages = variantImageUrls(variants);
   const promptAssets = normalizePromptAssets(input.promptAssets, raw);
   const imageUrl = safeText(input.imageUrl, safeText(raw.imageUrl));
   const images = uniqueStrings([
     imageUrl,
     ...stringArray(input.images),
     ...stringArray(raw.images),
-    ...stringArray(promptAssets?.allImageUrls)
+    ...stringArray(promptAssets?.allImageUrls),
+    ...variantImages
   ]);
-  const variants = normalizeVariants(input.variants, raw);
+  const enrichedPromptAssets =
+    promptAssets || images.length
+      ? {
+          ...(promptAssets ?? {}),
+          allImageUrls: uniqueStrings([...stringArray(promptAssets?.allImageUrls), ...images])
+        }
+      : undefined;
 
   return {
     id: safeText(input.id, sku),
@@ -153,7 +172,7 @@ export function normalizeProductForCache(input: CacheProductInput, syncedAt = no
     imageUrl: imageUrl || images[0] || "",
     images,
     description: safeText(input.description, safeText(raw.description)),
-    promptAssets,
+    promptAssets: enrichedPromptAssets,
     variants,
     status: normalizeStatus(input.status, availableStock, lowStockThreshold),
     source: safeText(input.source, "ecommerce_external_products"),

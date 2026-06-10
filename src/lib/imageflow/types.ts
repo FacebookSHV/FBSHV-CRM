@@ -1,6 +1,7 @@
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 
 export type ImageflowJobStatus = "queued" | "running" | "needs_user" | "completed" | "failed" | "cancelled";
+export type ImageflowAssetStatus = "uploaded" | "needs_review" | "approved" | "rejected";
 
 export type ImageflowJob = {
   id: string;
@@ -36,7 +37,7 @@ export type ImageflowAsset = {
   mediaId: string | null;
   assetIndex: number;
   role: string;
-  status: string;
+  status: ImageflowAssetStatus;
   fileName: string;
   mimeType: string;
   fileSize: number;

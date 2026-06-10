@@ -1,9 +1,10 @@
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { generateAiText } from "@/lib/ai/provider";
 import { formatMoney } from "@/lib/money";
-import type { LandingHero, LandingSections, LandingSeo, LandingTemplate, LandingTemplateId } from "./types";
+import { getLandingTemplate } from "./template-catalog";
+import type { LandingHero, LandingSections, LandingSeo, LandingTemplateId } from "./types";
 
-export const landingTemplates: LandingTemplate[] = [
+export const legacyLandingTemplates = [
   {
     id: "sales_fast",
     name: "Bán nhanh",
@@ -24,10 +25,65 @@ export const landingTemplates: LandingTemplate[] = [
   }
 ];
 
+export { landingTemplates } from "./template-catalog";
+
 function stockText(product: ProductWithInventory) {
   if (product.availableStock <= 0) return "Shop sẽ kiểm tồn trước khi chốt đơn";
   if (product.availableStock <= product.lowStockThreshold) return "Số lượng còn ít, nên nhắn shop kiểm mẫu ngay";
   return "Đang có hàng trong kho đồng bộ";
+}
+
+function productModel(product: ProductWithInventory) {
+  const source = `${product.name} ${product.sku}`.toUpperCase();
+  const match = source.match(/CS\s*300W\s*K268|K268|[A-Z]{1,6}\s*\d{2,4}W?\s*K?\d{2,4}/);
+  return (match?.[0] || product.name || product.sku).replace(/\s+/g, " ").trim();
+}
+
+function isFanController(product: ProductWithInventory) {
+  const source = `${product.name} ${product.sku} ${product.description} ${product.promptAssets?.promptText ?? ""}`.toLowerCase();
+  return /cs\s*300w|k268|mạch|mach|remote|điều khiển quạt|dieu khien quat|quạt|quat/.test(source);
+}
+
+function fanControllerContent(product: ProductWithInventory): LandingContent {
+  const name = product.name || product.sku;
+  const model = productModel(product);
+  const price = formatMoney(product.currentPrice || product.salePrice || product.originalPrice, product.currency);
+  const stock = stockText(product);
+  const baseSeo = {
+    title: `${name} - bộ điều khiển quạt remote | Shop Huy Vân`,
+    description: `${name} giá ${price}, gồm mạch điều khiển, bảng nút và remote. Nhắn shop kiểm đúng loại quạt trước khi lắp.`
+  };
+
+  return {
+    hero: {
+      headline: `${model} - bộ điều khiển quạt đủ mạch, bảng nút và remote`,
+      subheadline: "Nâng cấp điều khiển quạt bằng remote/bảng nút, nhắn shop kiểm đúng loại quạt và cách lắp trước khi chốt đơn.",
+      bullets: [`Giá tham khảo ${price}`, stock, "Gồm mạch đỏ, bảng nút bấm, remote và dây kết nối", "Tư vấn loại quạt có thể lắp trước khi mua"],
+      primaryCta: "Nhắn shop kiểm mạch",
+      secondaryCta: "Xem cách lắp"
+    },
+    sections: {
+      trustBadges: ["Kiểm đúng mạch trước khi chốt", "Có remote và bảng nút", "Hỗ trợ tư vấn lắp đặt", "Dữ liệu từ sản phẩm thật"],
+      benefits: [
+        { title: "Điều khiển quạt tiện hơn", text: "Bộ sản phẩm tập trung cho nhu cầu điều khiển quạt bằng remote và bảng nút rời." },
+        { title: "Kiểm đúng linh kiện", text: "Ảnh/prompt phải giữ đúng mạch đỏ thân ngang, bảng nút xanh, remote trắng và dây kết nối." },
+        { title: "Đỡ mua nhầm mẫu", text: "Khách gửi ảnh quạt hoặc mạch cũ để shop kiểm nguồn, công suất và phương án lắp trước khi chốt." }
+      ],
+      steps: [
+        { title: "Chụp quạt hoặc mạch cũ", text: "Gửi ảnh quạt, mạch đang dùng hoặc nhu cầu thay thế để shop kiểm đúng mẫu." },
+        { title: "Đối chiếu nguồn/công suất", text: "Shop kiểm khả năng phù hợp với bộ điều khiển CS 300W K268 trước khi khách lắp." },
+        { title: "Lắp mạch, bảng nút, remote", text: "Khi lắp cần đấu đúng dây, cố định bảng nút và test remote/bảng nút trước khi dùng lâu dài." },
+        { title: "Test tốc độ quạt", text: "Kiểm các mức điều khiển, khoảng cách remote và độ ổn định sau khi lắp." }
+      ],
+      faq: [
+        { question: "Bộ này lắp được cho loại quạt nào?", answer: "Cần kiểm nguồn, công suất và kiểu motor. Khách nên gửi ảnh quạt/mạch cũ để shop xác nhận trước khi mua." },
+        { question: "Có đủ mạch, bảng nút và remote không?", answer: "Theo dữ liệu/ảnh sản phẩm hiện có, bộ gồm mạch điều khiển, bảng nút bấm, remote và dây kết nối." },
+        { question: "Tự lắp được không?", answer: "Nếu không chắc dây nguồn hoặc motor, nên nhờ thợ điện. Shop hỗ trợ tư vấn sơ đồ theo ảnh thực tế của khách." }
+      ],
+      offerNote: "Để lại số điện thoại hoặc nhắn shop kèm ảnh quạt/mạch cũ, shop sẽ kiểm mẫu và tư vấn cách lắp trước khi chốt."
+    },
+    seo: baseSeo
+  };
 }
 
 type LandingContent = {
@@ -145,20 +201,58 @@ function normalizeAiLandingContent(raw: Record<string, unknown>, fallback: Landi
   };
 }
 
+function enforceProductHeadline(content: LandingContent, product: ProductWithInventory, fallback: LandingContent) {
+  const model = productModel(product).toLowerCase();
+  const headline = content.hero.headline.toLowerCase();
+  if (model && !headline.includes(model)) {
+    return {
+      ...content,
+      hero: {
+        ...content.hero,
+        headline: fallback.hero.headline,
+        subheadline: content.hero.subheadline || fallback.hero.subheadline
+      },
+      seo: {
+        title: fallback.seo.title,
+        description: content.seo.description || fallback.seo.description
+      }
+    };
+  }
+  return content;
+}
+
 function landingAiPrompt(product: ProductWithInventory, templateId: LandingTemplateId) {
+  const template = getLandingTemplate(templateId);
   const imageUrls = [...new Set([...(product.images ?? []), product.imageUrl].filter(Boolean))].slice(0, 8);
+  const model = productModel(product);
+  const fanRules = isFanController(product)
+    ? [
+        "QUY TAC RIENG CHO BO DIEU KHIEN QUAT:",
+        "- San pham la bo dieu khien quat, khong viet thanh nguon dien chung, den, o cam, bo kich, hay thiet bi du an.",
+        "- Ten/SEO/headline phai giu model CS 300W K268 hoac ten san pham goc.",
+        "- Noi dung can nhac ro gom mach dieu khien mau do, bang nut bam mau xanh, remote mau trang va day ket noi.",
+        "- Neu viet ve loai quat co the lap, phai ghi can shop kiem nguon/cong suat/kieu motor truoc khi chot, khong cam ket lap moi loai quat."
+      ].join("\n")
+    : "";
   return [
     "Tạo nội dung landing page bán hàng cho sản phẩm gia dụng/điện nước Shop Huy Vân.",
     "Mục tiêu: kích thích người mua nhắn tư vấn hoặc mua ngay, có hook nỗi đau, lợi ích rõ, không khô như template.",
     "Viết tiếng Việt tự nhiên, có dấu, không dùng emoji, không bịa bảo hành/thông số nếu dữ liệu không có.",
     "Không dùng claim tuyệt đối như tốt nhất, rẻ nhất, chữa khỏi, cam kết 100%.",
-    `Template intent: ${templateId}`,
+    `Template: ${template.name} (${template.id})`,
+    `Góc chuyển đổi: ${template.copyAngle}`,
+    `Phong cách hình ảnh/giao diện: ${template.visualStyle}`,
+    `Các khối chuyển đổi cần giữ nếu có dữ liệu thật: ${template.conversionBlocks.join(", ")}`,
+    "Bắt buộc: giảm giá, lượt bán, đánh giá, đếm ngược và lời chứng thực là thành phần quan trọng nhưng chỉ được ghi giá trị khi dữ liệu nguồn thật cung cấp.",
+    "Nếu chưa có dữ liệu thật cho một khối social proof, hãy viết copy trung tính để UI ẩn khối đó; không tạo số, tên khách hoặc thời hạn mẫu.",
     `Tên sản phẩm: ${product.name}`,
+    `Model/SKU cần giữ trong headline SEO: ${model}`,
     `SKU: ${product.sku}`,
     `Giá hiện tại: ${formatMoney(product.currentPrice || product.salePrice || product.originalPrice, product.currency)}`,
     `Tồn khả dụng: ${product.availableStock}`,
     product.description ? `Mô tả nguồn: ${product.description}` : "Mô tả nguồn đang rỗng, hãy viết dựa trên tên/SKU/ảnh, không bịa thông số.",
     product.promptAssets?.promptText ? `Product Core promptAssets.promptText:\n${product.promptAssets.promptText}` : "",
+    fanRules,
     imageUrls.length ? `Ảnh sản phẩm thật:\n${imageUrls.map((url, index) => `${index + 1}. ${url}`).join("\n")}` : "",
     "Chỉ trả JSON hợp lệ, không markdown, không giải thích. Trả một object JSON ngắn, không xuống dòng dài.",
     `Schema:
@@ -194,14 +288,16 @@ export async function buildLandingContentWithAi(product: ProductWithInventory, t
   if (!parsed) {
     const partial = contentFromPartialAiText(ai.text, fallback);
     if (partial) {
-      return { content: partial, aiMode: "ai", aiNotice: `${ai.notice ?? "AI thật"}; JSON chưa hoàn chỉnh nên CRM đã dùng phần headline/subheadline đọc được.` };
+      return { content: enforceProductHeadline(partial, product, fallback), aiMode: "ai", aiNotice: `${ai.notice ?? "AI thật"}; JSON chưa hoàn chỉnh nên CRM đã dùng phần headline/subheadline đọc được.` };
     }
     return { content: fallback, aiMode: "template", aiNotice: "AI trả nội dung không phải JSON hợp lệ, đã dùng template an toàn." };
   }
-  return { content: normalizeAiLandingContent(parsed, fallback), aiMode: "ai", aiNotice: ai.notice };
+  return { content: enforceProductHeadline(normalizeAiLandingContent(parsed, fallback), product, fallback), aiMode: "ai", aiNotice: ai.notice };
 }
 
 export function buildLandingContent(product: ProductWithInventory, templateId: LandingTemplateId) {
+  if (isFanController(product)) return fanControllerContent(product);
+
   const name = product.name || product.sku;
   const price = formatMoney(product.currentPrice || product.salePrice || product.originalPrice, product.currency);
   const stock = stockText(product);

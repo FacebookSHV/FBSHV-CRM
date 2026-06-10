@@ -1,6 +1,19 @@
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 
-export type LandingTemplateId = "sales_fast" | "video_guide" | "compare";
+export type LandingTemplateId =
+  | "sales_fast"
+  | "video_guide"
+  | "compare"
+  | "tiktok_shop"
+  | "shopee_shop"
+  | "facebook_ads"
+  | "livestream_deal"
+  | "combo_saver"
+  | "flash_sale"
+  | "trust_builder"
+  | "brand_story"
+  | "minimal_clean"
+  | "bold_impact";
 export type LandingPageStatus = "draft" | "published" | "archived";
 
 export type LandingHero = {
@@ -70,4 +83,18 @@ export type LandingTemplate = {
   name: string;
   description: string;
   bestFor: string;
+  group: "marketplace" | "conversion" | "story";
+  accent: string;
+  visualStyle: string;
+  copyAngle: string;
+  conversionBlocks: string[];
+  imageSlots: Array<{
+    index: number;
+    role: string;
+    label: string;
+    width: number;
+    height: number;
+    ratio: string;
+    instruction: string;
+  }>;
 };

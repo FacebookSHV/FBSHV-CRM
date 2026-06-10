@@ -1,6 +1,8 @@
 import { Image as ImageIcon, Phone, Send, Star, Wrench } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import type { LandingPage } from "@/lib/landing-pages/types";
+import { readLandingRealProof } from "@/lib/landing-pages/real-proof";
+import { LandingTestimonials } from "./landing-conversion-proof";
 
 type LandingProduct = LandingPage["product"];
 
@@ -26,6 +28,18 @@ function landingImageClass(image: string, creativeImages: string[]) {
     : "h-full w-full object-contain p-2";
 }
 
+function isFanController(product: LandingProduct) {
+  return /cs\s*300w|k268|mạch|mach|remote|điều khiển quạt|dieu khien quat|quạt|quat/i.test(`${product?.name ?? ""} ${product?.sku ?? ""}`);
+}
+
+function interestStats(page: LandingPage) {
+  return [
+    { label: "Lượt xem trang", value: Number(page.metrics?.views ?? 0) },
+    { label: "Lead đã ghi nhận", value: Number(page.metrics?.leads ?? 0) },
+    { label: "Lượt liên hệ", value: Number(page.metrics?.contacts ?? 0) }
+  ];
+}
+
 export function LandingPublicSections({
   images,
   leadName,
@@ -41,8 +55,10 @@ export function LandingPublicSections({
   submitLead,
   submitting
 }: LandingPublicSectionsProps) {
+  const realProof = readLandingRealProof(product);
   return (
     <>
+      <LandingTestimonials proof={realProof} />
       {page.sections.benefits.length ? (
         <section className="mx-auto max-w-6xl px-4 py-5">
           <div className="mb-4 flex items-end justify-between gap-4">
@@ -89,6 +105,28 @@ export function LandingPublicSections({
         </section>
       ) : null}
 
+      {isFanController(product) ? (
+        <section className="mx-auto max-w-6xl px-4 py-5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <Wrench className="h-6 w-6 text-brand-600" aria-hidden="true" />
+              <div>
+                <h2 className="text-2xl font-black text-slate-950">Các loại quạt cần kiểm trước khi lắp</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">Không cam kết lắp mọi loại quạt. Shop cần kiểm nguồn, motor và công suất thực tế trước khi chốt.</p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {["Quạt trần", "Quạt treo tường", "Quạt thông gió", "Quạt hơi nước/công nghiệp"].map((item) => (
+                <div key={item} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-black text-slate-950">{item}</div>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">Gửi ảnh quạt/mạch cũ để shop xác nhận có phù hợp bộ CS 300W K268 không.</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {page.sections.steps.length ? (
         <section className="mx-auto max-w-6xl px-4 py-5">
           <div className="rounded-2xl bg-[#08111f] p-5 text-white md:p-8">
@@ -108,6 +146,25 @@ export function LandingPublicSections({
           </div>
         </section>
       ) : null}
+
+      <section className="mx-auto max-w-6xl px-4 py-5">
+        <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-[0.8fr_1.2fr]">
+          <div>
+            <h2 className="text-2xl font-black text-slate-950">Đánh giá & lượt quan tâm</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              CRM chỉ hiển thị số liệu thật đã ghi nhận từ landing page. Review khách đã mua sẽ hiển thị khi Product Core cung cấp dữ liệu đánh giá thật.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {interestStats(page).map((item) => (
+              <div key={item.label} className="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
+                <div className="text-2xl font-black tabular-nums text-slate-950">{item.value}</div>
+                <div className="mt-1 text-xs font-bold text-slate-500">{item.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <section id="lead-form" className="mx-auto grid max-w-6xl gap-4 px-4 py-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

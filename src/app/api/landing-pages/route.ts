@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { fail, failFromError, ok } from "@/lib/api-response";
 import { createLandingPage, listLandingPages, listLandingTemplates } from "@/lib/landing-pages/store";
+import { landingTemplateIds } from "@/lib/landing-pages/template-catalog";
 import type { LandingTemplateId } from "@/lib/landing-pages/types";
 
 const createLandingPageSchema = z.object({
   productSku: z.string().trim().min(1).max(120),
-  templateId: z.enum(["sales_fast", "video_guide", "compare"]),
+  templateId: z.enum(landingTemplateIds),
   title: z.string().trim().max(200).optional(),
   createAiImages: z.boolean().optional()
 });

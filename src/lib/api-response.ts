@@ -33,12 +33,14 @@ export function failFromError(error: unknown, fallback = "Lỗi hệ thống") {
         ? message.split(":")[0] || "LANDING_ERROR"
       : message.startsWith("IMAGEFLOW_")
         ? message.split(":")[0] || "IMAGEFLOW_ERROR"
+      : message.startsWith("CONTENT_") || message.startsWith("WAITING_IMAGEFLOW_ASSETS")
+        ? message.split(":")[0] || "CONTENT_ERROR"
       : message.startsWith("AUTO_PUBLISH_POSTS_DISABLED")
         ? "AUTO_PUBLISH_POSTS_DISABLED"
       : message.startsWith("BLOCKED_BY_MISSING_SECRET")
       ? "BLOCKED_BY_MISSING_SECRET"
       : "INTERNAL_ERROR";
-  const status = code.startsWith("BLOCKED") || code.endsWith("DISABLED") || code.startsWith("ADS_") || code.startsWith("LANDING_") || code.startsWith("IMAGEFLOW_") || code === "META_CAPI_CONFIG_MISSING"
+  const status = code.startsWith("BLOCKED") || code.endsWith("DISABLED") || code.startsWith("ADS_") || code.startsWith("LANDING_") || code.startsWith("IMAGEFLOW_") || code.startsWith("CONTENT_") || code === "WAITING_IMAGEFLOW_ASSETS" || code === "META_CAPI_CONFIG_MISSING"
     ? 400
     : code === "META_ADS_API_ERROR" || code === "META_CAPI_ERROR"
       ? 502

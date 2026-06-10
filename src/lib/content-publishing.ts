@@ -1,7 +1,8 @@
 import { getD1Database } from "@/lib/db";
-import { createPagePost, publishPhotoPost, schedulePagePost } from "@/lib/facebook/publishing";
+import { createAlbumPost, createPagePost, publishPhotoPost, schedulePagePost } from "@/lib/facebook/publishing";
 import { listContentMedia } from "@/lib/content-media";
 import { listContentPosts, updateContentPost } from "@/lib/content-planner";
+import { autoPublishEnabled, isAutoPublishRuntimeEnabled } from "@/lib/content-runtime";
 
 export type PublishJob = {
   id: string;
@@ -34,7 +35,7 @@ type JobRow = {
 const memoryJobs = new Map<string, PublishJob>();
 
 export function isAutoPublishPostsEnabled(env: Record<string, string | undefined> = process.env) {
-  return env.AUTO_PUBLISH_POSTS_ENABLED === "true";
+  return autoPublishEnabled(env);
 }
 
 function nowIso() {
@@ -152,6 +153,92 @@ export async function listPublishJobs(postId: string) {
   return (rows.results ?? []).map(mapJob);
 }
 
+async function listDuePublishJobs(now = nowIso(), limit = 20) {
+  const db = await getD1Database();
+  if (!db) {
+    return [...memoryJobs.values()]
+      .filter((job) => job.status === "scheduled" && !job.dryRun && Boolean(job.scheduledAt) && job.scheduledAt! <= now)
+      .slice(0, limit);
+  }
+  const rows = await db
+    .prepare(
+      `select * from content_publish_jobs
+       where status = 'scheduled' and dry_run = 0 and scheduled_at is not null and scheduled_at <= ?
+       order by scheduled_at asc limit ?`
+    )
+    .bind(now, limit)
+    .all<JobRow>();
+  return (rows.results ?? []).map(mapJob);
+}
+
+function usableMediaUrls(media: Awaited<ReturnType<typeof listContentMedia>>) {
+  return media
+    .filter((item) => item.mediaType === "image" && Boolean(item.publicUrl) && item.status !== "failed" && item.status !== "rejected")
+    .map((item) => item.publicUrl!)
+    .filter(Boolean);
+}
+
+async function publishPreparedJob(job: PublishJob) {
+  const post = (await listContentPosts()).find((item) => item.id === job.postId);
+  if (!post) {
+    const failed = await saveJob({ ...job, status: "failed", error: "CONTENT_POST_NOT_FOUND", updatedAt: nowIso() });
+    await writeLog(failed, "publish_due", "failed", failed.error ?? "");
+    return failed;
+  }
+
+  if (!(await isAutoPublishRuntimeEnabled())) {
+    const dryRun = await saveJob({
+      ...job,
+      status: "dry_run",
+      dryRun: true,
+      error: "AUTO_PUBLISH_POSTS_DISABLED",
+      updatedAt: nowIso()
+    });
+    await writeLog(dryRun, "publish_due", "dry_run", dryRun.error ?? "");
+    return dryRun;
+  }
+
+  const mediaUrls = usableMediaUrls(await listContentMedia(job.postId));
+  if (mediaUrls.length === 0) {
+    const waiting = await saveJob({
+      ...job,
+      status: "scheduled",
+      error: "WAITING_IMAGEFLOW_ASSETS",
+      updatedAt: nowIso()
+    });
+    await writeLog(waiting, "publish_due_waiting_media", "scheduled", "WAITING_IMAGEFLOW_ASSETS");
+    return waiting;
+  }
+
+  let publishing = await saveJob({ ...job, status: "publishing", dryRun: false, error: null, updatedAt: nowIso() });
+  try {
+    const result =
+      mediaUrls.length > 1
+        ? await createAlbumPost({ pageId: job.pageId, message: post.caption, mediaUrls })
+        : await publishPhotoPost({ pageId: job.pageId, message: post.caption, link: mediaUrls[0] });
+    publishing = await saveJob({
+      ...publishing,
+      status: "published",
+      externalPostId: result.externalPostId,
+      error: null,
+      updatedAt: nowIso()
+    });
+    await updateContentPost(job.postId, { status: "published", externalPostId: result.externalPostId });
+    await writeLog(publishing, "publish_due", "published", "", { externalPostId: result.externalPostId, mediaCount: mediaUrls.length });
+    return publishing;
+  } catch (error) {
+    const failed = await saveJob({
+      ...publishing,
+      status: "failed",
+      error: error instanceof Error ? error.message : "Publish lỗi không xác định",
+      updatedAt: nowIso()
+    });
+    await updateContentPost(job.postId, { status: "failed", error: failed.error });
+    await writeLog(failed, "publish_due", "failed", failed.error ?? "");
+    return failed;
+  }
+}
+
 export async function createPublishJobs(input: {
   postId: string;
   pageIds: string[];
@@ -174,13 +261,20 @@ export async function createPublishJobs(input: {
       pageId,
       idempotencyKey,
       status: input.scheduledAt ? "scheduled" : "pending",
-      dryRun: !isAutoPublishPostsEnabled(),
+      dryRun: !(await isAutoPublishRuntimeEnabled()),
       scheduledAt: input.scheduledAt ?? null,
       createdAt: now,
       updatedAt: now
     };
 
     // NEO: Không tự đăng hàng loạt; khi chưa bật cờ publish thật thì chỉ tạo job dry-run theo từng Page.
+    if (input.scheduledAt) {
+      job = await saveJob(job);
+      await writeLog(job, "schedule", job.status, job.dryRun ? "AUTO_PUBLISH_POSTS_DISABLED" : "");
+      jobs.push(job);
+      continue;
+    }
+
     if (job.dryRun || !input.publishNow) {
       job.error = job.dryRun ? "AUTO_PUBLISH_POSTS_DISABLED" : null;
       if (job.dryRun && input.publishNow && !input.scheduledAt) job.status = "dry_run";
@@ -192,9 +286,11 @@ export async function createPublishJobs(input: {
 
     try {
       job = await saveJob({ ...job, status: "publishing", dryRun: false, updatedAt: nowIso() });
-      const publicMedia = media.find((item) => item.publicUrl);
-      const result = publicMedia
-        ? await publishPhotoPost({ pageId, message: post.caption, link: publicMedia.publicUrl || undefined })
+      const mediaUrls = usableMediaUrls(media);
+      const result = mediaUrls.length > 1
+        ? await createAlbumPost({ pageId, message: post.caption, mediaUrls })
+        : mediaUrls[0]
+        ? await publishPhotoPost({ pageId, message: post.caption, link: mediaUrls[0] })
         : await createPagePost({ pageId, message: post.caption });
       job = await saveJob({
         ...job,
@@ -223,6 +319,23 @@ export async function createPublishJobs(input: {
   }
 
   return jobs;
+}
+
+export async function publishDueContentJobs(input: { now?: string; limit?: number } = {}) {
+  const checkedAt = input.now ?? nowIso();
+  const due = await listDuePublishJobs(checkedAt, input.limit ?? 20);
+  const jobs: PublishJob[] = [];
+  for (const job of due) {
+    jobs.push(await publishPreparedJob(job));
+  }
+  return {
+    checkedAt,
+    dueCount: due.length,
+    publishedCount: jobs.filter((job) => job.status === "published").length,
+    waitingMediaCount: jobs.filter((job) => job.error === "WAITING_IMAGEFLOW_ASSETS").length,
+    failedCount: jobs.filter((job) => job.status === "failed").length,
+    jobs
+  };
 }
 
 export async function cancelPublishJobs(postId: string) {

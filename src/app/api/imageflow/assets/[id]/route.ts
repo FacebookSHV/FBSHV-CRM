@@ -1,10 +1,15 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { fail } from "@/lib/api-response";
-import { readImageflowAssetById } from "@/lib/imageflow/store";
+import { z } from "zod";
+import { fail, failFromError, ok } from "@/lib/api-response";
+import { readImageflowAssetById, updateImageflowAssetStatus } from "@/lib/imageflow/store";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+const reviewSchema = z.object({
+  status: z.enum(["needs_review", "approved", "rejected"])
+});
 
 async function getBucket() {
   try {
@@ -32,4 +37,15 @@ export async function GET(_request: Request, context: RouteContext) {
       "cache-control": "public, max-age=31536000, immutable"
     }
   });
+}
+
+export async function PATCH(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  try {
+    const parsed = reviewSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) return fail("Trạng thái duyệt ảnh không hợp lệ.", 400, "INVALID_IMAGEFLOW_ASSET_REVIEW");
+    return ok(await updateImageflowAssetStatus(id, parsed.data.status));
+  } catch (error) {
+    return failFromError(error);
+  }
 }

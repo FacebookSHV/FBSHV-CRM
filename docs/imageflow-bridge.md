@@ -43,6 +43,22 @@ node .\scripts\imageflow-bridge.mjs --once
 
 Mặc định bridge tự gọi `scripts/imageflow-crm-adapter.mjs`. Chỉ cần set `IMAGEFLOW_COMMAND` nếu muốn thay adapter bằng lệnh render khác.
 
+> **Lưu ý `IMAGEFLOW_WORK_DIR`:** Đây là thư mục dùng chung giữa CRM bridge và ImageFlow local engine. Bridge đặt job file vào đây, adapter đọc từ đây để đẩy vào ImageFlow local. Không thay đổi path này mà không đồng bộ cả 2 phía.
+
+## Tài liệu liên quan
+
+File này chỉ mô tả CRM side. Khi làm task liên quan đến render engine, CDP automation, profile/runtime, hoặc pipeline local, phải đọc thêm docs của ImageFlow local engine tại:
+
+```txt
+D:\codex_manager_v3.1\tools\imageflow\docs
+```
+
+File quan trọng cần đọc:
+- `AGENTS.md` — rules kiến trúc, cấu trúc file, runtime/account rules
+- `GUI_PROVIDER_AUTOMATION_FLOW.md` — flow chuẩn product → image/video, provider runner map
+- `FLOW_CDP_AUTOMATION_LAND_FLOW.md` — luồng CDP cho Google Flow video
+- `PROJECT_SNAPSHOT.md` — trạng thái hiện tại của ImageFlow local
+
 ## Adapter CRM → ImageFlow local
 
 `scripts/imageflow-crm-adapter.mjs` đọc `IMAGEFLOW_JOB_FILE`, chuyển product context của CRM thành product queue của ImageFlow, dùng cấu hình:
@@ -59,6 +75,32 @@ http://127.0.0.1:7096
 ```
 
 Nếu ImageFlow đang render sản phẩm khác, adapter dừng với lỗi rõ để tránh phá queue đang chạy. Khi queue rảnh, adapter thêm đúng SKU vào queue, chạy CDP queue nếu chưa chạy, chờ `final_facebook_feed_*.jpg`, rồi ghi `manifest.json` vào output để bridge upload asset về CRM.
+
+## Chế độ nhẹ máy
+
+Bridge xử lý tuần tự một job. Vòng polling không claim job mới khi job trước chưa kết thúc.
+
+Bridge có cơ chế giảm tải:
+
+- job `running` quá `locked_until` sẽ được auto-recovery về `queued` trong lần claim tiếp theo;
+- khi không có job, polling backoff dần đến tối đa 120 giây;
+- adapter local có timeout cứng mặc định 10 phút qua `IMAGEFLOW_ADAPTER_TIMEOUT_MS`;
+- nếu Chrome/CDP/profile treo, bridge không giữ `tickRunning` vô hạn và không upload ảnh cũ.
+
+Adapter mặc định chỉ chọn:
+
+- một profile tạo prompt;
+- một profile render;
+- không fanout đồng thời toàn bộ profile pool.
+
+Có thể thay giới hạn bằng biến local, nhưng không nên tăng khi pool CDP chưa được kiểm tra:
+
+```txt
+IMAGEFLOW_CRM_MAX_PROMPT_PROFILES=1
+IMAGEFLOW_CRM_MAX_RENDER_PROFILES=1
+```
+
+Trước khi thêm job hoặc mở browser, adapter kiểm tra trạng thái local. Nếu queue hoặc CDP runner đang bận, CRM chuyển job sang `needs_user`; không retry mở thêm profile trong cùng lượt.
 
 ## Secret production
 

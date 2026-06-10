@@ -11,7 +11,7 @@ export type ContentMediaRecord = {
   fileSize: number;
   r2Key?: string | null;
   publicUrl?: string | null;
-  status: "uploaded" | "failed";
+  status: "uploaded" | "failed" | "needs_review" | "approved" | "rejected";
   error?: string | null;
   createdAt: string;
 };
@@ -133,7 +133,7 @@ export async function listContentMedia(postId: string) {
       file_size: number;
       r2_key: string | null;
       public_url: string | null;
-      status: "uploaded" | "failed";
+      status: "uploaded" | "failed" | "needs_review" | "approved" | "rejected";
       error: string | null;
       created_at: string;
     }>();

@@ -494,3 +494,90 @@ Khi user chỉ giao task ngắn, Codex vẫn phải đọc và tuân thủ file 
 ```txt
 Đọc AGENTS.md trước. Làm task hiện tại theo đúng hướng dẫn trong AGENTS.md. Nếu cần thao tác Meta/Facebook/Cloudflare/GitHub UI, dùng Chrome profile E:\codex-chrome-profiles\fbshv-meta. Không dùng profile mặc định. Không deploy nếu Cloudflare account không đúng 3d1e8c3bd1f4f9ace7388e60dd11fbed.
 ```
+
+## ImageFlow
+
+Có **2 nguồn docs** khác nhau — phải đọc cả hai trước khi làm bất kỳ task nào liên quan ImageFlow:
+
+### Nguồn 1 — CRM side (repo này)
+
+```txt
+docs/imageflow-bridge.md
+```
+
+Đây là doc của phần cầu nối CRM ↔ ImageFlow local: job lifecycle, API routes, D1 tables (`imageflow_jobs`, `imageflow_assets`, `content_media`), trạng thái job, secret `IMAGEFLOW_BRIDGE_TOKEN`, và UI responsive.
+
+### Nguồn 2 — ImageFlow local engine
+
+```txt
+D:\codex_manager_v3.1\tools\imageflow\docs
+```
+
+File quan trọng cần đọc:
+- `AGENTS.md` — rules kiến trúc bất biến của ImageFlow local
+- `GUI_PROVIDER_AUTOMATION_FLOW.md` — flow chuẩn product → image/video, provider runner map
+- `FLOW_CDP_AUTOMATION_LAND_FLOW.md` — luồng CDP cho Google Flow video
+- `PROJECT_SNAPSHOT.md` — trạng thái hiện tại của ImageFlow local
+
+**Quy tắc bắt buộc khi làm task ImageFlow:**
+
+1. Đọc cả 2 nguồn docs trên trước khi bắt tay.
+2. Xác nhận đã đọc file nào, tóm tắt ngắn flow liên quan đến task.
+3. Nếu task không khớp với flow trong docs → **dừng và hỏi user**, không tự suy diễn.
+
+**Các rule cứng từ ImageFlow local (không được vi phạm):**
+
+- Hướng kiến trúc đã chốt: **Local-first packaged app**. Không tự chuyển sang Cloud/Web control.
+- Không tạo file `.py`, `.bat`, `.ps1` mới tại root `tools/imageflow/`. Entry point chỉ trong `launchers/`.
+- Mỗi account chỉ có một runtime chính: `accounts/profiles/account_<id>/runtime`. Không tạo runtime mới kiểu `chatgpt_profile_<id>`, `flow_profile_<id>`.
+- Không `taskkill chrome.exe` toàn cục. Chỉ đóng đúng PID runner đã tạo và có lock.
+- Không xóa cookie, Local Storage, IndexedDB, Login Data, Preferences, snapshot đăng nhập.
+- Product workspace chuẩn: `work/products/<slug>/` với các subfolder `input/`, `meta/`, `output/`, `tmp/`. Không tạo folder ngoài cấu trúc này.
+- Video output: `work/products/<slug>/output/video/scene0X_p{profile_id}.mp4`. Không dùng path legacy `videos/<product>/`.
+- CDP port chuẩn: Flow `9700+profile_id`, ChatGPT `9500+profile_id`, Claude `9600+profile_id`.
+- Không submit toàn bộ storyboard 30s vào một lần — chỉ 1 scene / 1 lần submit.
+- Sau mỗi task phải cập nhật `docs/PROJECT_SNAPSHOT.md` của ImageFlow local.
+
+**Phân loại disposable vs giữ lâu dài:**
+
+Giữ lâu dài (không xóa):
+- `work/products/<slug>/meta/video_script.json`
+- `work/products/<slug>/meta/scene_assignment.json`
+- `work/products/<slug>/output/video/scene0X.mp4`
+- `work/products/<slug>/output/video/keyframes/`
+- `accounts/profiles/account_<id>/runtime/` và `snapshots/`
+
+Disposable sau job xong:
+- `work/products/<slug>/tmp/flow_video_prompt.txt`
+- `work/products/<slug>/tmp/keyframe_prompts.json`
+- `work/runtime/pipeline.lock`
+- CDP staging temp trong `work/gui_automation/cdp_profiles/` (chỉ xóa clone staging, không xóa account runtime thật)
+
+Nếu thư mục docs local không tồn tại hoặc không đọc được, dừng và báo:
+
+```txt
+NEED_USER_IMAGEFLOW_DOCS_ACCESS
+```
+
+## Snapshot Protocol
+
+`docs/SNAPSHOT.md` là nguồn sự thật duy nhất của dự án. Sau mỗi task hoàn thành, Codex PHẢI cập nhật file này trước khi báo xong.
+
+Thứ tự cập nhật bắt buộc:
+1. `Snapshot version` → ngày hôm nay theo định dạng `YYYY-MM-DD`.
+2. `Trạng thái` → mã ngắn mô tả trạng thái mới.
+3. `Latest deploy` → version Cloudflare vừa deploy, nếu task có deploy.
+4. Section `Feature Status` → đổi status feature vừa xong thành `PRODUCTION`, `VERIFIED`, `PAUSED`, `SCHEMA ONLY`, hoặc trạng thái thật tương ứng.
+5. Section `Secrets` → chỉ đánh dấu tên secret đã set, không ghi giá trị.
+6. Section `ImageFlow` → cập nhật job ID, asset ID, QA result mới nhất nếu task liên quan ảnh.
+7. Section `Open Issues` → xóa issue đã fix và thêm issue mới phát sinh.
+8. Section `Deploy History` → thêm dòng mới lên đầu, giữ tối đa 10 dòng.
+
+Quy tắc docs:
+- Không tạo lại `docs/handoff/LATEST.md`.
+- Không tạo lại `docs/FEATURE-PROGRESS.md`.
+- Không tạo handoff date-based mới trừ khi task kéo dài hơn 2 ngày hoặc thật sự cần doc chi tiết riêng.
+- Nếu tạo doc chi tiết riêng, vẫn phải cập nhật `docs/SNAPSHOT.md` trước.
+- Các file trạng thái cũ phải nằm trong `docs/archive/` để tham khảo lịch sử, không dùng làm nguồn chính.
+
+Khi commit, `docs/SNAPSHOT.md` phải đi cùng commit với code liên quan, không commit riêng nếu task có code.

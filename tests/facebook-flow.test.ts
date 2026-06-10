@@ -6,7 +6,10 @@ import { getFacebookRuntimeConfig } from "@/lib/facebook/env";
 import { FACEBOOK_ADS_OAUTH_SCOPES, FACEBOOK_OAUTH_SCOPES } from "@/lib/facebook/oauth";
 import { withMetaPermission } from "@/lib/facebook/permissions";
 import { getMemoryFacebookStoreForTests } from "@/lib/facebook/store";
-import { parseFacebookWebhookPayload } from "@/lib/facebook/webhook";
+import { parseFacebookWebhookPayload, signFacebookWebhookBody } from "@/lib/facebook/webhook";
+import { resetIntegrationEventsForTests } from "@/lib/integration/events-store";
+import { resetIntegrationJobsForTests } from "@/lib/integration/jobs-store";
+import { processIntegrationJobs } from "@/lib/integration/processor";
 
 type WebhookResponsePayload = {
   success: boolean;
@@ -66,6 +69,8 @@ describe("facebook real-flow helpers", () => {
     process.env.AUTO_HIDE_PHONE_COMMENTS_ENABLED = "false";
     getMemoryFacebookStoreForTests().resetForTests();
     resetFacebookAutomationMemoryForTests();
+    resetIntegrationEventsForTests();
+    resetIntegrationJobsForTests();
   });
 
   it("env validation fail-fast khi tắt mock nhưng thiếu Meta secret", () => {
@@ -140,6 +145,35 @@ describe("facebook real-flow helpers", () => {
     expect(firstPayload.data.duplicates).toBe(0);
     expect(secondPayload.data.processed).toBe(0);
     expect(secondPayload.data.duplicates).toBe(1);
+  });
+
+  it("real webhook quick-ack enqueue trước, processor xử lý message sau", async () => {
+    process.env.MOCK_EXTERNAL_APIS = "false";
+    process.env.META_APP_ID = "1296077039298909";
+    process.env.META_APP_SECRET = ["unit", "test", "meta", "fixture"].join("-");
+    process.env.META_VERIFY_TOKEN = "verify";
+    process.env.CRM_APP_URL = "https://fbshv-crm.ngchihuy.workers.dev";
+    process.env.ENCRYPTION_KEY = ["unit", "test", "encryption", "fixture", "long"].join("-");
+    const body = JSON.stringify(messengerPayload("mid_quick_ack"));
+    const signature = await signFacebookWebhookBody(process.env.META_APP_SECRET, body);
+
+    const response = await receiveFacebookWebhook(
+      new Request("http://localhost/api/webhooks/facebook", {
+        method: "POST",
+        body,
+        headers: { "x-hub-signature-256": signature }
+      })
+    );
+    const payload = (await response.json()) as { success: boolean; data: { queued: number; processed?: number } };
+    expect(response.status).toBe(200);
+    expect(payload.data.queued).toBe(1);
+    expect(payload.data.processed).toBeUndefined();
+    expect(await getMemoryFacebookStoreForTests().listMessages("conv_page_test_1_customer_test_1")).toHaveLength(0);
+
+    process.env.MOCK_EXTERNAL_APIS = "true";
+    const processed = await processIntegrationJobs({ maxJobs: 1 });
+    expect(processed.results[0]?.status, JSON.stringify(processed)).toBe("completed");
+    expect(await getMemoryFacebookStoreForTests().listMessages("conv_page_test_1_customer_test_1")).toHaveLength(1);
   });
 
   it("auto reply message không gửi trùng khi webhook retry", async () => {

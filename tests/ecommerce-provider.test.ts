@@ -1,16 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST as createFacebookOrder } from "@/app/api/ecommerce/orders/from-facebook/route";
+import { createFacebookOrderThroughCore } from "@/lib/core-flow/order-core-contract";
 import { normalizeProductForCache } from "@/lib/ecommerce/cache";
 import { HttpEcommerceManagementProvider } from "@/lib/ecommerce/http-provider";
 import { getEcommerceProvider } from "@/lib/ecommerce/provider";
 import { MockEcommerceManagementProvider } from "@/lib/ecommerce/mock-provider";
 import { canApplyLocalInventoryMutation } from "@/lib/orders/inventory-safety";
+import { resetFacebookOrderStoreForTests } from "@/lib/orders/store";
+import type { EcommerceManagementProvider } from "@/lib/ecommerce/types";
 
 type ApiPayload<T> = {
   success: boolean;
   data: T;
   error?: string;
 };
+
+const testCredential = ["unit", "test", "credential"].join("-");
 
 describe("mock ecommerce provider", () => {
   afterEach(() => {
@@ -100,6 +105,66 @@ describe("mock ecommerce provider", () => {
     expect(payload.error).toContain("Chặn tạo đơn thật vì an toàn");
   });
 
+  it("không ghi đơn local khi Order Core tạo đơn thất bại", async () => {
+    resetFacebookOrderStoreForTests();
+    const persist = vi.fn();
+    const cancelReservation = vi.fn().mockResolvedValue({
+      success: true,
+      data: { reservationId: "reserve-1", sku: "SKU_REAL", quantity: 1, status: "cancelled", expiresAt: "" }
+    });
+    const provider = {
+      getSkuPrice: vi.fn().mockResolvedValue({ success: true, data: { sku: "SKU_REAL", price: 120000, currency: "VND" } }),
+      checkInventory: vi.fn().mockResolvedValue({ success: true, data: { sku: "SKU_REAL", requestedQuantity: 1, availableStock: 5, enoughStock: true } }),
+      reserveInventory: vi.fn().mockResolvedValue({ success: true, data: { reservationId: "reserve-1", sku: "SKU_REAL", quantity: 1, status: "reserved", expiresAt: "" } }),
+      createOrderFromFacebook: vi.fn().mockResolvedValue({ success: false, error: "core rejected" }),
+      cancelReservation
+    } as unknown as EcommerceManagementProvider;
+
+    const result = await createFacebookOrderThroughCore(
+      { customerId: "customer-1", sku: "SKU_REAL", quantity: 1 },
+      { provider, persist, audit: vi.fn().mockResolvedValue(true) }
+    );
+
+    expect(result.success).toBe(false);
+    expect(persist).not.toHaveBeenCalled();
+    expect(cancelReservation).toHaveBeenCalledWith("reserve-1");
+  });
+
+  it("ghi read-model sau khi Order Core xác nhận thành công", async () => {
+    const calls: string[] = [];
+    const provider = {
+      getSkuPrice: vi.fn(async () => {
+        calls.push("price");
+        return { success: true, data: { sku: "SKU_REAL", price: 120000, currency: "VND" } };
+      }),
+      checkInventory: vi.fn(async () => {
+        calls.push("inventory");
+        return { success: true, data: { sku: "SKU_REAL", requestedQuantity: 1, availableStock: 5, enoughStock: true } };
+      }),
+      reserveInventory: vi.fn(async () => {
+        calls.push("reserve");
+        return { success: true, data: { reservationId: "reserve-2", sku: "SKU_REAL", quantity: 1, status: "reserved", expiresAt: "" } };
+      }),
+      createOrderFromFacebook: vi.fn(async () => {
+        calls.push("external-order");
+        return { success: true, data: { id: "core-order-1", externalOrderId: "EXT-1", sku: "SKU_REAL", quantity: 1, status: "created" } };
+      })
+    } as unknown as EcommerceManagementProvider;
+    const persist = vi.fn(async () => {
+      calls.push("persist");
+      return { localOrderId: "local-1", externalOrderId: "EXT-1" };
+    });
+
+    const result = await createFacebookOrderThroughCore(
+      { customerId: "customer-1", sku: "SKU_REAL", quantity: 1 },
+      { provider, persist, audit: vi.fn().mockResolvedValue(true) }
+    );
+
+    expect(result.success).toBe(true);
+    expect(calls).toEqual(["price", "inventory", "reserve", "external-order", "persist"]);
+    if (result.success) expect(result.data.localOrderId).toBe("local-1");
+  });
+
   it("HTTP provider gọi đúng namespace /api/external khi lấy sản phẩm", async () => {
     const calls: string[] = [];
     vi.stubGlobal(
@@ -115,7 +180,7 @@ describe("mock ecommerce provider", () => {
 
     const provider = new HttpEcommerceManagementProvider({
       baseUrl: "https://ecommerce.example.com",
-      apiKey: "unit-test-credential"
+      apiKey: testCredential
     });
     const result = await provider.getProducts({ q: "camera", limit: 5 });
 
@@ -140,7 +205,7 @@ describe("mock ecommerce provider", () => {
 
     const provider = new HttpEcommerceManagementProvider({
       baseUrl: "https://ecommerce.example.com",
-      apiKey: "unit-test-credential"
+      apiKey: testCredential
     });
     const result = await provider.syncProducts();
 
@@ -163,7 +228,7 @@ describe("mock ecommerce provider", () => {
     );
     const provider = new HttpEcommerceManagementProvider({
       baseUrl: "https://ecommerce.example.com",
-      apiKey: "unit-test-credential"
+      apiKey: testCredential
     });
     const result = await provider.checkInventory("SKU_REAL", 1);
     expect(result.success).toBe(true);

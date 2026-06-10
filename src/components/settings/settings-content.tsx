@@ -46,6 +46,11 @@ type AiTestResult = {
   model: string;
 };
 
+type RuntimeHealth = {
+  ready: boolean;
+  checks: Array<{ ok: boolean }>;
+};
+
 type ApiEnvelope<T> = { success: true; data: T } | { success: false; error?: string };
 
 function tone(ok: boolean) {
@@ -58,25 +63,37 @@ function statusLabel(ok: boolean) {
 
 function runtimeModeLabel(mode: string) {
   if (mode === "mock") return "chưa kết nối thật";
-  if (mode === "real") return "real";
+  if (mode === "real") return "đã kết nối thật";
   if (mode === "not_enabled") return "chưa bật";
-  return mode;
+  return "chưa xác định";
 }
 
 export function SettingsContent() {
   const [status, setStatus] = useState<RuntimeStatus | null>(null);
+  const [health, setHealth] = useState<RuntimeHealth | null>(null);
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("Đang tải cấu hình runtime...");
   const [testResults, setTestResults] = useState<AiTestResult[]>([]);
 
   async function loadStatus() {
-    const response = await fetch("/api/settings/runtime", { cache: "no-store" });
-    const payload = (await response.json().catch(() => null)) as ApiEnvelope<RuntimeStatus> | null;
-    if (response.ok && payload?.success) {
-      setStatus(payload.data);
-      setMessage("Đã tải trạng thái cấu hình thật từ runtime.");
-    } else {
-      setMessage(payload && !payload.success ? payload.error ?? "Không tải được Settings." : "Không tải được Settings.");
+    try {
+      const [runtimeResponse, healthResponse] = await Promise.all([
+        fetch("/api/settings/runtime", { cache: "no-store" }),
+        fetch("/api/settings/runtime/health", { cache: "no-store" })
+      ]);
+      const runtimePayload = (await runtimeResponse.json().catch(() => null)) as ApiEnvelope<RuntimeStatus> | null;
+      const healthPayload = (await healthResponse.json().catch(() => null)) as
+        | (ApiEnvelope<RuntimeHealth> & { data?: RuntimeHealth })
+        | null;
+      if (runtimeResponse.ok && runtimePayload?.success) {
+        setStatus(runtimePayload.data);
+        setHealth(healthPayload?.data ?? null);
+        setMessage(healthPayload?.data?.ready ? "Hệ thống đã sẵn sàng vận hành." : "Một số kết nối cần được kiểm tra.");
+      } else {
+        setMessage("Không tải được trạng thái hệ thống.");
+      }
+    } catch {
+      setMessage("Không kết nối được hệ thống. Vui lòng thử lại.");
     }
   }
 
@@ -147,8 +164,15 @@ export function SettingsContent() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-soft">
-        <StatusPill tone="info">Runtime status</StatusPill>
+        <StatusPill tone={health?.ready ? "success" : "warning"}>
+          {health?.ready ? "Sẵn sàng vận hành" : "Cần kiểm tra"}
+        </StatusPill>
         <span className="text-sm text-slate-600">{message}</span>
+        {health ? (
+          <span className="ml-auto text-xs tabular-nums text-slate-500">
+            {health.checks.filter((item) => item.ok).length}/{health.checks.length} hạng mục sẵn sàng
+          </span>
+        ) : null}
       </div>
 
       {status ? (
@@ -158,19 +182,30 @@ export function SettingsContent() {
               title="Facebook/Meta"
               icon={<PlugZap />}
               ok={status.facebook.configured}
-              lines={[`Mode: ${runtimeModeLabel(status.facebook.mode)}`, `App ID: ${status.facebook.appId || "chưa có"}`, `Redirect: ${status.facebook.redirectUri}`, status.facebook.missing.length ? `Thiếu: ${status.facebook.missing.join(", ")}` : "Không thiếu biến bắt buộc"]}
+              lines={[
+                `Kết nối: ${runtimeModeLabel(status.facebook.mode)}`,
+                status.facebook.appId ? "Ứng dụng Facebook đã được nhận diện" : "Chưa nhận diện ứng dụng Facebook",
+                status.facebook.missing.length ? `Cần bổ sung ${status.facebook.missing.length} cấu hình` : "Cấu hình nền tảng đã đầy đủ"
+              ]}
             />
             <StatusCard
               title="Web Quản Lý TMĐT"
               icon={<CheckCircle2 />}
               ok={status.ecommerce.configured && status.ecommerce.mode === "real"}
-              lines={[`Mode: ${runtimeModeLabel(status.ecommerce.mode)}`, `Base URL: ${status.ecommerce.baseUrl || "chưa có"}`]}
+              lines={[
+                `Kết nối: ${runtimeModeLabel(status.ecommerce.mode)}`,
+                status.ecommerce.baseUrl ? "Nguồn sản phẩm và đơn hàng đã sẵn sàng" : "Chưa có nguồn sản phẩm và đơn hàng"
+              ]}
             />
             <StatusCard
-              title="Cloudflare runtime"
+              title="Hạ tầng lưu trữ"
               icon={<Cloud />}
               ok={status.cloudflare.d1 && status.cloudflare.r2}
-              lines={[`Worker: ${status.cloudflare.worker}`, `Account: ${status.cloudflare.expectedAccountId}`, `D1 ${status.cloudflare.d1DatabaseName}: ${status.cloudflare.d1 ? "có binding" : "thiếu binding"}`, `R2 ${status.cloudflare.r2BucketName}: ${status.cloudflare.r2 ? "có binding" : "thiếu binding"}`]}
+              lines={[
+                `Ứng dụng CRM: ${status.cloudflare.worker ? "đang nhận diện" : "chưa nhận diện"}`,
+                `Cơ sở dữ liệu: ${status.cloudflare.d1 ? "sẵn sàng" : "chưa sẵn sàng"}`,
+                `Kho tệp và hình ảnh: ${status.cloudflare.r2 ? "sẵn sàng" : "chưa sẵn sàng"}`
+              ]}
             />
             <StatusCard
               title="Quảng cáo Facebook"
@@ -179,11 +214,7 @@ export function SettingsContent() {
               lines={[
                 `Tài khoản đã kết nối: ${status.ads.accountCount}`,
                 `Tạo quảng cáo thật: ${status.ads.writeActionsEnabled ? "đang bật, luôn tạo tạm dừng" : "đang chặn an toàn"}`,
-                status.ads.businessSdk?.installed && status.ads.businessSdk.usable
-                  ? `SDK Meta chính thức: đã cài ${status.ads.businessSdk.version}`
-                  : status.ads.businessSdk?.installed
-                    ? "SDK Meta chính thức: đã cài, Worker dùng Graph API trực tiếp"
-                    : "SDK Meta chính thức: chưa cài",
+                status.ads.businessSdk?.installed ? "Kết nối quảng cáo chính thức đã sẵn sàng" : "Kết nối quảng cáo cần kiểm tra",
                 status.ads.missingPermissions.length ? "Cần kết nối lại quyền Ads" : "Quyền đọc Ads đang sẵn sàng"
               ]}
             />
@@ -222,7 +253,11 @@ export function SettingsContent() {
               title="Webhook"
               icon={<PlugZap />}
               ok={status.webhook.verifyTokenConfigured}
-              lines={[`Verify token: ${status.webhook.verifyTokenConfigured ? "đã cấu hình" : "chưa có"}`, status.webhook.facebookWebhook, status.webhook.facebookCallback]}
+              lines={[
+                `Xác thực webhook: ${status.webhook.verifyTokenConfigured ? "đã cấu hình" : "chưa có"}`,
+                status.webhook.facebookWebhook ? "Kênh nhận sự kiện Facebook đã sẵn sàng" : "Kênh nhận sự kiện Facebook chưa sẵn sàng",
+                status.webhook.facebookCallback ? "Kết nối lại Facebook đã có địa chỉ hợp lệ" : "Kết nối lại Facebook cần kiểm tra"
+              ]}
             />
             <StatusCard
               title="AI Providers"

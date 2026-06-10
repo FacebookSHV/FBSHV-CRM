@@ -1,5 +1,5 @@
 ﻿name = "fbshv-crm"
-main = ".open-next/worker.js"
+main = "custom-worker.ts"
 compatibility_date = "2026-05-15"
 compatibility_flags = ["nodejs_compat"]
 
@@ -16,4 +16,7 @@ migrations_dir = "drizzle"
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "fbshv-crm-assets"
+
+[triggers]
+crons = ["*/1 * * * *", "*/10 * * * *", "15 17 * * *"]
 

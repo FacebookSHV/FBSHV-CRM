@@ -3,6 +3,7 @@ import { readCachedProductBySku } from "@/lib/ecommerce/cache";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
 import { createImageflowJob } from "@/lib/imageflow/store";
 import { sendMetaConversionEvent } from "@/lib/meta/conversions";
+import { buildTemplateFrameSpec, getLandingTemplate } from "./template-catalog";
 import { buildLandingContent, buildLandingContentWithAi, landingTemplates } from "./templates";
 import type { LandingPage, LandingPageStatus, LandingTemplateId, LandingVariant } from "./types";
 
@@ -117,6 +118,58 @@ const landingImageFrameSpec = {
   ]
 };
 
+function isFanControllerProduct(productName: string, sku: string) {
+  return /cs\s*300w|k268|mạch|mach|remote|điều khiển quạt|dieu khien quat|quạt|quat/i.test(`${productName} ${sku}`);
+}
+
+function buildLandingImageBrief(
+  product: { name: string; sku: string },
+  content: { hero: unknown; sections: unknown; seo: unknown },
+  templateId: LandingTemplateId
+) {
+  const fanController = isFanControllerProduct(product.name, product.sku);
+  const template = getLandingTemplate(templateId);
+  return {
+    template: {
+      id: template.id,
+      name: template.name,
+      visualStyle: template.visualStyle,
+      copyAngle: template.copyAngle,
+      conversionBlocks: template.conversionBlocks,
+      imageSlots: template.imageSlots
+    },
+    productLock: {
+      productName: product.name,
+      sku: product.sku,
+      mustKeepExactProductIdentity: true,
+      seoTitleMustContain: product.name,
+      doNotRenameAs: ["nguồn điện dự án", "ổ cắm", "đèn", "bộ kích điện", "hộp nguồn chung"]
+    },
+    referenceImagePolicy: [
+      "Use all local source_images from product_package.json together as the source of truth.",
+      "Do not redesign the board, remote, button panel, cable, color, printed markings, component positions, or proportions.",
+      "If there is only one upstream product image, use that exact source photo as the product layer in each frame; create callouts, arrows, badges, crop/zoom panels, and background layout around it, but do not redraw a new PCB, new remote, or new button panel.",
+      "Reject any generated frame that changes the PCB component layout, remote button count/layout, button-panel color/layout, or turns the kit into another K268/K269/K64-style controller."
+    ],
+    requiredAlbumSlots: fanController
+      ? [
+          "1. Hero kit: use the exact source product photo to show the complete CS 300W K268 kit: red circuit board, blue button panel, white remote and cable.",
+          "2. Circuit board proof: crop/zoom the exact source PCB; it must stay horizontally long/wide like the reference, not shortened, redrawn, cropped into a square, or replaced by another board.",
+          "3. Installation guide: use the exact source product photo plus safe generic callouts/step labels around it; do not invent impossible wiring or a different board.",
+          "4. Compatible fan check: use icons/silhouettes or simple fan category cards around the exact source product photo; do not show a different controller kit. Mention ceiling fan, wall fan, ventilation fan and water-cooling/industrial fan as items to check before buying.",
+          "5. Offer/trust frame: use the exact source product photo with price/stock/consultation CTA and exact product name; no fake reviews or fake sold count."
+        ]
+      : [
+          "1. Hero product frame with exact product identity.",
+          "2. Feature proof frame using close-up reference details.",
+          "3. How-to-use or installation guide if the product requires setup.",
+          "4. Fit/compatibility/use-case frame based only on product data.",
+          "5. Offer/trust frame using real price/stock data only."
+        ],
+    landingCopy: content
+  };
+}
+
 function sanitizeError(error: unknown) {
   const message = error instanceof Error ? error.message : "Không gửi được CAPI.";
   return message.replace(/[A-Za-z0-9_-]{32,}/g, (value) => `${value.slice(0, 6)}...${value.slice(-4)}`);
@@ -141,7 +194,7 @@ async function readDefaultVariant(landingPageId: string): Promise<LandingVariant
   };
 }
 
-async function readLandingCreativeImages(landingPageId: string, productSku: string) {
+async function readLandingCreativeImages(landingPageId: string) {
   const db = await getD1Database();
   if (!db) return [] as string[];
   const rows = await db
@@ -150,16 +203,16 @@ async function readLandingCreativeImages(landingPageId: string, productSku: stri
        from imageflow_jobs j
        join imageflow_assets a on a.job_id = j.id and a.workspace_id = j.workspace_id
        where j.workspace_id = ?
-         and j.status = 'completed'
+         and j.status in ('completed', 'needs_user')
+         and a.status = 'approved'
          and a.public_url is not null
-         and (j.post_id = ? or j.product_sku = ?)
+         and j.post_id = ?
        order by
-         case when j.post_id = ? then 0 else 1 end,
          j.updated_at desc,
          a.asset_index asc
        limit 8`
     )
-    .bind(DEFAULT_WORKSPACE_ID, landingPageId, productSku, landingPageId)
+    .bind(DEFAULT_WORKSPACE_ID, landingPageId)
     .all<{ public_url: string }>();
   return [...new Set((rows.results ?? []).map((row) => row.public_url).filter(Boolean))];
 }
@@ -168,7 +221,7 @@ async function mapLandingPage(row: LandingPageRow): Promise<LandingPage> {
   const [product, variant, creativeImages] = await Promise.all([
     readCachedProductBySku(row.product_sku),
     readDefaultVariant(row.id),
-    readLandingCreativeImages(row.id, row.product_sku)
+    readLandingCreativeImages(row.id)
   ]);
   const generated = product ? buildLandingContent(product, row.template_id) : null;
   return {
@@ -281,6 +334,7 @@ export async function createLandingPage(input: { productSku: string; templateId:
   let imageJobError: string | null = null;
   if (input.createAiImages !== false) {
     try {
+      const templateFrameSpec = buildTemplateFrameSpec(input.templateId);
       // NEO: Landing page xếp job ImageFlow từ Product Core thật để hero/gallery có ảnh AI 4:5, không dùng ảnh giả.
       await createImageflowJob({
         postId: id,
@@ -296,8 +350,33 @@ export async function createLandingPage(input: { productSku: string; templateId:
           creativeGoal: "Tạo bộ ảnh bán hàng gia dụng dùng cho hero, gallery và quảng cáo Facebook.",
           imageStyle: "ảnh sản phẩm rõ, sạch, ánh sáng thương mại, có bối cảnh sử dụng thực tế, không chữ nhỏ khó đọc",
           requiredRatio: "4:5",
-          frameSpec: landingImageFrameSpec,
-          productSku: product.sku
+          templateId: input.templateId,
+          templateBlueprint: {
+            name: template.name,
+            accent: template.accent,
+            visualStyle: template.visualStyle,
+            copyAngle: template.copyAngle,
+            conversionBlocks: template.conversionBlocks,
+            imageSlots: template.imageSlots
+          },
+          frameSpec: {
+            ...landingImageFrameSpec,
+            ...templateFrameSpec,
+            output: { ...landingImageFrameSpec.output, ...templateFrameSpec.output },
+            safeArea: { ...landingImageFrameSpec.safeArea, ...templateFrameSpec.safeArea }
+          },
+          productSku: product.sku,
+          sourceData: "Product Core detail + landing copy",
+          landingCopy: {
+            hero: content.hero,
+            sections: content.sections,
+            seo: content.seo
+          },
+          creativeBrief: buildLandingImageBrief(product, {
+            hero: content.hero,
+            sections: content.sections,
+            seo: content.seo
+          }, input.templateId)
         }
       });
       imageJobQueued = true;

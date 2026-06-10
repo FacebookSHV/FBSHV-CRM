@@ -7,6 +7,7 @@ import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
 import type {
   CreateImageflowJobInput,
   ImageflowAsset,
+  ImageflowAssetStatus,
   ImageflowJob,
   ImageflowJobPatch,
   ImageflowJobStatus,
@@ -81,9 +82,45 @@ function safeNumber(value: unknown, fallback: number, min: number, max: number) 
   return Math.max(min, Math.min(max, Math.floor(number)));
 }
 
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean))];
+}
+
+function mergePromptAssets(...assets: Array<ProductWithInventory["promptAssets"] | undefined>) {
+  const merged: NonNullable<ProductWithInventory["promptAssets"]> = {};
+  for (const item of assets) {
+    if (!item) continue;
+    Object.assign(merged, item);
+  }
+  const allImageUrls = uniqueStrings(assets.flatMap((item) => item?.allImageUrls ?? []));
+  if (allImageUrls.length > 0) merged.allImageUrls = allImageUrls;
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function mergeProductDetails(primary: ProductWithInventory, detail?: ProductWithInventory | null): ProductWithInventory {
+  if (!detail) return primary;
+  const images = uniqueStrings([primary.imageUrl, detail.imageUrl, ...(primary.images ?? []), ...(detail.images ?? [])]);
+  const variants = (detail.variants?.length ?? 0) > (primary.variants?.length ?? 0) ? detail.variants : primary.variants;
+  return {
+    ...primary,
+    ...detail,
+    imageUrl: detail.imageUrl || primary.imageUrl || images[0] || "",
+    images,
+    description: detail.description || primary.description,
+    promptAssets: mergePromptAssets(primary.promptAssets, detail.promptAssets),
+    variants,
+    rawPayload: detail.rawPayload || primary.rawPayload
+  };
+}
+
 function statusOrDefault(value: unknown): ImageflowJobStatus {
   const statuses = new Set<ImageflowJobStatus>(["queued", "running", "needs_user", "completed", "failed", "cancelled"]);
   return statuses.has(value as ImageflowJobStatus) ? (value as ImageflowJobStatus) : "queued";
+}
+
+function assetStatusOrDefault(value: unknown): ImageflowAssetStatus {
+  const statuses = new Set<ImageflowAssetStatus>(["uploaded", "needs_review", "approved", "rejected"]);
+  return statuses.has(value as ImageflowAssetStatus) ? (value as ImageflowAssetStatus) : "uploaded";
 }
 
 function extensionFor(fileName: string, mimeType: string) {
@@ -132,25 +169,27 @@ async function readProductPromptContextBySku(sku: string) {
   const cached = await readCachedProductBySku(sku);
   if (!cached) return null;
 
-  const detail = await (await getEcommerceProviderAsync()).getProductBySku(sku);
-  if (!detail.success) {
-    throw new Error(`IMAGEFLOW_PRODUCT_DETAIL_FAILED: ${detail.error}`);
+  const provider = await getEcommerceProviderAsync();
+  const skuDetail = await provider.getProductBySku(sku);
+  if (!skuDetail.success) {
+    throw new Error(`IMAGEFLOW_PRODUCT_DETAIL_FAILED: ${skuDetail.error}`);
   }
+  const idDetail = await provider.getProductById(sku).catch(() => null);
+  const mergedDetail = mergeProductDetails(skuDetail.data, idDetail?.success ? idDetail.data : null);
 
-  // NEO: Prompt ảnh luôn lấy detail Product Core theo SKU để có đủ images/promptAssets, không dùng cache thiếu ngữ cảnh.
+  // NEO: Product Core detail must keep all images, promptAssets and variants before ImageFlow writes a local product_package.
   return normalizeProductForCache(
     {
-      ...detail.data,
+      ...mergedDetail,
       workspaceId: cached.workspaceId,
-      stock: detail.data.stock ?? cached.stock,
-      availableStock: detail.data.availableStock ?? cached.availableStock,
-      reservedStock: detail.data.reservedStock ?? cached.reservedStock,
-      lowStockThreshold: detail.data.lowStockThreshold ?? cached.lowStockThreshold
+      stock: mergedDetail.stock ?? cached.stock,
+      availableStock: mergedDetail.availableStock ?? cached.availableStock,
+      reservedStock: mergedDetail.reservedStock ?? cached.reservedStock,
+      lowStockThreshold: mergedDetail.lowStockThreshold ?? cached.lowStockThreshold
     },
     nowIso()
   );
 }
-
 function mapJob(row: ImageflowJobRow): ImageflowJob {
   return {
     id: row.id,
@@ -186,7 +225,7 @@ function mapAsset(row: ImageflowAssetRow): ImageflowAsset {
     mediaId: row.media_id,
     assetIndex: row.asset_index,
     role: row.role,
-    status: row.status,
+    status: assetStatusOrDefault(row.status),
     fileName: row.file_name,
     mimeType: row.mime_type,
     fileSize: row.file_size,
@@ -334,15 +373,45 @@ export async function claimNextImageflowJob(workerId: string) {
   const lockedBy = workerId.trim() || "local-imageflow";
   const db = await getD1Database();
   const startedAt = nowIso();
-  const lockedUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const lockedUntil = new Date(Date.now() + 35 * 60 * 1000).toISOString();
 
   if (!db) {
+    for (const [id, item] of memoryJobs.entries()) {
+      if (item.status === "running" && item.lockedUntil && item.lockedUntil < startedAt) {
+        memoryJobs.set(id, {
+          ...item,
+          status: "queued",
+          lockedBy: null,
+          lockedUntil: null,
+          startedAt: null,
+          updatedAt: startedAt
+        });
+      }
+    }
     const job = [...memoryJobs.values()].find((item) => item.status === "queued");
     if (!job) return null;
     const claimed = { ...job, status: "running" as const, lockedBy, lockedUntil, startedAt, updatedAt: startedAt };
     memoryJobs.set(job.id, claimed);
     return attachDetails(claimed);
   }
+
+  // NEO: Auto-recovery job stuck running — reset job hết lockedUntil về queued
+  const nowForRecovery = nowIso();
+
+  await db
+    .prepare(
+      `UPDATE imageflow_jobs
+       SET status = 'queued',
+           locked_by = NULL,
+           locked_until = NULL,
+           started_at = NULL,
+           updated_at = ?
+       WHERE workspace_id = ?
+         AND status = 'running'
+         AND locked_until < ?`
+    )
+    .bind(nowForRecovery, DEFAULT_WORKSPACE_ID, nowForRecovery)
+    .run();
 
   const row = await db
     .prepare(
@@ -357,7 +426,7 @@ export async function claimNextImageflowJob(workerId: string) {
     .first<ImageflowJobRow>();
   if (!row) return null;
 
-  await db
+  const claimResult = await db
     .prepare(
       `update imageflow_jobs
        set status = 'running', locked_by = ?, locked_until = ?, started_at = coalesce(started_at, ?), updated_at = ?
@@ -365,6 +434,8 @@ export async function claimNextImageflowJob(workerId: string) {
     )
     .bind(lockedBy, lockedUntil, startedAt, startedAt, row.id)
     .run();
+  // NEO: Only the worker that changed queued -> running may process the ImageFlow job.
+  if ((claimResult.meta.changes ?? 0) === 0) return null;
   return getImageflowJob(row.id);
 }
 
@@ -412,6 +483,7 @@ export async function saveImageflowAsset(jobId: string, input: UploadedImageflow
   const key = `imageflow/${jobId}/${assetId}.${ext}`;
   const publicUrl = `${appBaseUrl()}/api/imageflow/assets/${assetId}`;
   const bytes = await input.file.arrayBuffer();
+  const initialStatus: ImageflowAssetStatus = job.targetFormat === "landing_page" ? "needs_review" : "uploaded";
 
   // NEO: Cầu nối ImageFlow chỉ nhận ảnh render thật từ local rồi lưu R2, không tạo mock trong CRM.
   await bucket.put(key, bytes, {
@@ -427,7 +499,7 @@ export async function saveImageflowAsset(jobId: string, input: UploadedImageflow
     mediaId,
     assetIndex,
     role: input.role?.trim() || "album_image",
-    status: "uploaded",
+    status: initialStatus,
     fileName: input.file.name,
     mimeType: input.file.type,
     fileSize: input.file.size,
@@ -485,9 +557,9 @@ export async function saveImageflowAsset(jobId: string, input: UploadedImageflow
       .prepare(
         `insert into content_media
         (id, workspace_id, post_id, media_type, mime_type, file_name, file_size, r2_key, public_url, status, error, created_at)
-        values (?, ?, ?, 'image', ?, ?, ?, ?, ?, 'uploaded', null, ?)`
+        values (?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, null, ?)`
       )
-      .bind(mediaId, DEFAULT_WORKSPACE_ID, job.postId ?? job.id, asset.mimeType, asset.fileName, asset.fileSize, key, publicUrl, createdAt)
+      .bind(mediaId, DEFAULT_WORKSPACE_ID, job.postId ?? job.id, asset.mimeType, asset.fileName, asset.fileSize, key, publicUrl, initialStatus, createdAt)
   );
   await db.batch(statements);
   if (existingAsset?.r2Key) await bucket.delete(existingAsset.r2Key);
@@ -507,4 +579,31 @@ export async function readImageflowAssetById(id: string) {
     .bind(id, DEFAULT_WORKSPACE_ID)
     .first<ImageflowAssetRow>();
   return row ? mapAsset(row) : null;
+}
+
+export async function updateImageflowAssetStatus(id: string, status: ImageflowAssetStatus) {
+  const nextStatus = assetStatusOrDefault(status);
+  if (nextStatus === "uploaded" && status !== "uploaded") {
+    throw new Error("IMAGEFLOW_ASSET_STATUS_INVALID: Trạng thái ảnh không hợp lệ.");
+  }
+  const existing = await readImageflowAssetById(id);
+  if (!existing) throw new Error("IMAGEFLOW_ASSET_NOT_FOUND: Không tìm thấy ảnh ImageFlow.");
+
+  const next = { ...existing, status: nextStatus };
+  const db = await getD1Database();
+  if (!db) {
+    memoryAssets.set(id, next);
+    return next;
+  }
+
+  const statements = [
+    db.prepare("update imageflow_assets set status = ? where id = ? and workspace_id = ?").bind(nextStatus, id, DEFAULT_WORKSPACE_ID)
+  ];
+  if (existing.mediaId) {
+    statements.push(
+      db.prepare("update content_media set status = ? where id = ? and workspace_id = ?").bind(nextStatus, existing.mediaId, DEFAULT_WORKSPACE_ID)
+    );
+  }
+  await db.batch(statements);
+  return next;
 }

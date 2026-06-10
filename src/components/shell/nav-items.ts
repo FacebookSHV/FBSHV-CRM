@@ -8,6 +8,7 @@ import {
   Gauge,
   History,
   Inbox,
+  ListChecks,
   LayoutTemplate,
   Megaphone,
   SearchCheck,
@@ -34,6 +35,7 @@ export const navItems = [
   { href: "/imageflow-bridge", label: "Cầu nối ảnh AI", icon: Cable },
   { href: "/reports", label: "Báo cáo", icon: BarChart3 },
   { href: "/settings", label: "Cài đặt", icon: Settings },
+  { href: "/settings/integration-jobs", label: "Tiến trình đồng bộ", icon: ListChecks },
   { href: "/audit-logs", label: "Audit Log", icon: History }
 ] as const;
 
@@ -52,7 +54,7 @@ export const navGroups = [
   },
   {
     label: "Hệ thống",
-    items: [navItems[14], navItems[15]]
+    items: [navItems[14], navItems[15], navItems[16]]
   }
 ] as const;
 
