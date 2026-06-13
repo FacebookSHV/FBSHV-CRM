@@ -391,6 +391,60 @@ export async function getImageflowJobByPostId(postId: string) {
   return row ? attachDetails(mapJob(row)) : null;
 }
 
+export async function deleteImageflowDataForPost(postId: string) {
+  const safePostId = postId.trim();
+  if (!safePostId) return { jobs: 0, assets: 0, objects: 0 };
+
+  const db = await getD1Database();
+  if (!db) {
+    const jobIds = new Set(
+      [...memoryJobs.values()].filter((job) => job.postId === safePostId).map((job) => job.id)
+    );
+    const assets = [...memoryAssets.values()].filter(
+      (asset) => asset.postId === safePostId || jobIds.has(asset.jobId)
+    );
+    const objectKeys = uniqueStrings(assets.map((asset) => asset.r2Key));
+    const bucket = await getBucket();
+    if (bucket && objectKeys.length > 0) await bucket.delete(objectKeys);
+    assets.forEach((asset) => memoryAssets.delete(asset.id));
+    jobIds.forEach((id) => memoryJobs.delete(id));
+    return { jobs: jobIds.size, assets: assets.length, objects: objectKeys.length };
+  }
+
+  const assets = await db
+    .prepare(
+      `select id, r2_key from imageflow_assets
+       where workspace_id = ?
+         and (post_id = ? or job_id in (
+           select id from imageflow_jobs where workspace_id = ? and post_id = ?
+         ))`
+    )
+    .bind(DEFAULT_WORKSPACE_ID, safePostId, DEFAULT_WORKSPACE_ID, safePostId)
+    .all<{ id: string; r2_key: string | null }>();
+  const objectKeys = uniqueStrings(assets.results.map((asset) => asset.r2_key));
+  const bucket = await getBucket();
+  if (bucket && objectKeys.length > 0) await bucket.delete(objectKeys);
+
+  const [assetResult, jobResult] = await db.batch([
+    db
+      .prepare(
+        `delete from imageflow_assets
+         where workspace_id = ?
+           and (post_id = ? or job_id in (
+             select id from imageflow_jobs where workspace_id = ? and post_id = ?
+           ))`
+      )
+      .bind(DEFAULT_WORKSPACE_ID, safePostId, DEFAULT_WORKSPACE_ID, safePostId),
+    db.prepare("delete from imageflow_jobs where workspace_id = ? and post_id = ?").bind(DEFAULT_WORKSPACE_ID, safePostId)
+  ]);
+
+  return {
+    jobs: jobResult.meta.changes ?? 0,
+    assets: assetResult.meta.changes ?? assets.results.length,
+    objects: objectKeys.length
+  };
+}
+
 export async function ensureImageflowJobForPost(input: CreateImageflowJobInput & { postId: string }) {
   const postId = input.postId.trim();
   if (!postId) throw new Error("IMAGEFLOW_POST_REQUIRED: Can co postId de tao anh tu dong.");

@@ -12,7 +12,7 @@ export type ContentIdea = {
 };
 
 export type ContentPost = ContentIdea & {
-  status: "draft" | "scheduled" | "published" | "failed" | "cancelled";
+  status: "draft" | "scheduled" | "published" | "failed" | "cancelled" | "deleted";
   scheduledAt?: string | null;
   updatedAt: string;
 };

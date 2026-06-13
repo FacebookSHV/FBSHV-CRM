@@ -8,7 +8,7 @@
 **Snapshot version:** `2026-06-13`
 **Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | imageflow_pool_scheduler_production_verified`
 **Production URL:** `https://fbshv-crm.ngchihuy.workers.dev`
-**Latest deploy:** `02a04285-23ee-4586-9d21-be22c5d1273b` (Pool Scheduler CRM-only cleanup, production verified 2026-06-13)
+**Latest deploy:** `e357c2b5-a7e9-4995-9fe2-0c7b6c4d4a30` (Content Planner CRM-only delete + production cleanup verified 2026-06-13)
 **Cloudflare account:** `3d1e8c3bd1f4f9ace7388e60dd11fbed` ← KHÔNG ĐỔI
 **Worker name:** `fbshv-crm`
 **D1:** `fbshv_crm_db` · `218d0eab-7734-4fda-91b9-e3e2604e6c86`
@@ -29,7 +29,7 @@
 | Product Sync từ Web TMĐT | ✅ PRODUCTION | Search SKU/name, persists F5 |
 | Orders CRM | ✅ PRODUCTION | Qua ecommerce provider, không tự trừ tồn |
 | Page Audit | ✅ PRODUCTION | Scores: 90 / 86 / 90 |
-| Content Planner | ✅ PRODUCTION · POOL SCHEDULER PATCHED | Entry duy nhất cho bài viết + ảnh; lưu/lên lịch bài tự xếp ImageFlow job theo `postId`; publish-now chờ ảnh, không đăng text-only |
+| Content Planner | ✅ PRODUCTION · POOL SCHEDULER + DELETE VERIFIED | Entry duy nhất cho bài viết + ảnh; lưu/lên lịch bài tự xếp ImageFlow job theo `postId`; xoá từng bài hoặc dọn trống chỉ tác động CRM, không gọi Meta |
 | AI Settings (Gemini 1-5) | ✅ PRODUCTION | Key 1,2 valid · Key 3 permission_denied |
 | AI Assistant | ✅ PRODUCTION | Gemini real, fallback template khi key lỗi |
 | Facebook Ads (3 accounts) | ✅ PRODUCTION · live-write PAUSED | Không tự ACTIVE • UI workspace light/beige refresh local verified 2026-06-11 |
@@ -252,7 +252,18 @@ FBSHV-CRM/
 - Production browser verify `/content-planner`: mobile `390x844`, tablet `820x1180`, desktop `1366x900`; không tràn ngang, không còn menu bridge, không còn nút tạo ảnh thủ công, vẫn có nút làm mới ảnh.
 - Route cũ `/imageflow-bridge` production tự chuyển về `/content-planner`.
 - Production API read-only verify: `/api/content/posts`, `/api/imageflow/jobs?limit=1`, `/api/content/calendar/suggestions?days=1` đều HTTP 200.
-- Không chạy smoke write tạo job giả vì `DELETE /api/content/posts/[id]` không xóa `imageflow_jobs`; tránh để rác Pool Scheduler production.
+- Ở lượt Pool Scheduler trước chưa chạy smoke write vì route delete chưa dọn `imageflow_jobs`; phần cleanup bên dưới đã bổ sung dọn đồng bộ.
+
+### 2026-06-13 — Content Planner delete + production cleanup
+
+- Thêm nút `Xoá khỏi CRM` cho từng bài và `Dọn trống planner` cho toàn bộ danh sách.
+- Modal bulk bắt buộc tick xác nhận, hiển thị progress và ghi rõ bài thật trên Facebook không bị xoá.
+- Route DELETE dùng `scope=crm`; không gọi Meta API và cho phép dọn record ở mọi trạng thái.
+- Cleanup dọn đồng bộ `content_posts`, targets, publish jobs/logs, media R2, `imageflow_jobs` và `imageflow_assets` liên quan.
+- Production đã xoá sạch 31/31 record; toàn bộ DELETE trả HTTP 200.
+- API `/api/content/posts` readback còn 0 bài.
+- D1 readback: `content_posts`, `content_post_targets`, `content_publish_jobs`, `content_publish_logs`, `content_media`, ImageFlow jobs/assets gắn post đều bằng 0.
+- Browser production pass mobile `390x844`, tablet `820x1180`, desktop `1366x900`; không tràn ngang, empty state đúng, nút bulk disabled khi count = 0.
 
 ### 2026-06-11 — Planner/ImageFlow UI local update
 
@@ -369,6 +380,7 @@ FBSHV-CRM/
 
 | Version | Ngày | Nội dung chính |
 |---|---|---|
+| `e357c2b5` | 2026-06-13 | Content Planner có xoá từng bài + dọn trống CRM-only; production xoá sạch 31 record, API/D1/UI responsive readback đều pass |
 | `02a04285` | 2026-06-13 | Pool Scheduler CRM-only production verified: Content Planner tự xếp job ảnh theo `postId`, bridge chỉ transport nền, adapter không tự chọn profile; Cloudflare gate pass, UI/API production pass |
 | `no-deploy` | 2026-06-11 | Ghi rule cứng `không chạy chồng nhiều job trên cùng profile` vào CRM/ImageFlow AGENTS + snapshot |
 | `no-deploy` | 2026-06-11 | Ổn định autostart cho `ImageFlow Bridge` watcher: thêm supervisor, wiring startup launcher, verify process/log thật |

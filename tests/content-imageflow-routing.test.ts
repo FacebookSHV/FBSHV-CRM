@@ -3,16 +3,22 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createContentPost = vi.fn();
+const deleteContentPost = vi.fn();
+const updateContentPost = vi.fn();
 const addContentPostTargets = vi.fn();
+const replaceContentPostTargets = vi.fn();
 const ensureImageflowJobForPost = vi.fn();
 
 vi.mock("@/lib/content-planner", () => ({
   createContentPost,
+  deleteContentPost,
+  updateContentPost,
   listContentPosts: vi.fn(async () => [])
 }));
 
 vi.mock("@/lib/content-publishing", () => ({
   addContentPostTargets,
+  replaceContentPostTargets,
   isAutoPublishPostsEnabled: vi.fn(() => false)
 }));
 
@@ -33,6 +39,7 @@ describe("Content Planner ImageFlow routing", () => {
     });
     addContentPostTargets.mockResolvedValue(["page_1"]);
     ensureImageflowJobForPost.mockResolvedValue({ id: "job_pool_1", status: "queued" });
+    deleteContentPost.mockResolvedValue({ deleted: true });
   });
 
   it("tự tạo một job ảnh gắn postId khi bài chưa có media", async () => {
@@ -81,6 +88,21 @@ describe("Content Planner ImageFlow routing", () => {
     expect(response.status).toBe(200);
     expect(ensureImageflowJobForPost).not.toHaveBeenCalled();
   });
+
+  it("xoá CRM-only truyền cờ rõ ràng và không gọi Meta", async () => {
+    const { DELETE } = await import("@/app/api/content/posts/[id]/route");
+    const response = await DELETE(
+      new Request("http://localhost/api/content/posts/post_pool_1?scope=crm", { method: "DELETE" }),
+      { params: Promise.resolve({ id: "post_pool_1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(deleteContentPost).toHaveBeenCalledWith("post_pool_1", { crmOnly: true });
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { deleted: true, scope: "crm" }
+    });
+  });
 });
 
 describe("CRM chỉ dùng Pool Scheduler của ImageFlow", () => {
@@ -103,5 +125,19 @@ describe("CRM chỉ dùng Pool Scheduler của ImageFlow", () => {
     const nav = await readFile(path.join(process.cwd(), "src", "components", "shell", "nav-items.ts"), "utf8");
     expect(nav).not.toContain('href: "/imageflow-bridge"');
     expect(nav).not.toContain("Cầu nối ảnh AI");
+  });
+
+  it("Content Planner có nút dọn trống và chỉ gọi delete scope CRM", async () => {
+    const content = await readFile(
+      path.join(process.cwd(), "src", "components", "facebook", "content-planner-content.tsx"),
+      "utf8"
+    );
+    const list = await readFile(
+      path.join(process.cwd(), "src", "components", "facebook", "content-planner-post-list.tsx"),
+      "utf8"
+    );
+    expect(content).toContain("?scope=crm");
+    expect(list).toContain("Dọn trống planner");
+    expect(list).toContain("Bài thật trên Facebook hoàn toàn không bị xoá");
   });
 });

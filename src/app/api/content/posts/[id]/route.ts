@@ -21,20 +21,21 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
+  const crmOnly = new URL(request.url).searchParams.get("scope") === "crm";
   try {
-    const result = await deleteContentPost(id);
+    const result = await deleteContentPost(id, { crmOnly });
     if (!result.deleted) {
       const message =
         result.error === "CONTENT_POST_DELETE_NOT_ALLOWED"
-          ? "Chỉ được xóa bài draft hoặc scheduled, không xóa bài đã publish."
+          ? "Bài này cần xác nhận xoá khỏi CRM. Bài thật trên Facebook sẽ không bị xoá."
           : "Không tìm thấy bài viết.";
       return fail(message, result.error === "CONTENT_POST_DELETE_NOT_ALLOWED" ? 400 : 404, result.error);
     }
-    return ok({ deleted: true });
+    return ok({ deleted: true, scope: crmOnly ? "crm" : "draft_or_scheduled" });
   } catch (error) {
     return failFromError(error);
   }

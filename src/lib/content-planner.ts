@@ -5,6 +5,7 @@ import { readCachedProducts } from "@/lib/ecommerce/cache";
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { getFacebookStore } from "@/lib/facebook/store";
 import { DEFAULT_WORKSPACE_ID } from "@/lib/facebook/types";
+import { deleteImageflowDataForPost } from "@/lib/imageflow/store";
 
 export const CONTENT_TEMPLATES = [
   "product_intro",
@@ -17,7 +18,7 @@ export const CONTENT_TEMPLATES = [
 ] as const;
 
 export type ContentTemplate = (typeof CONTENT_TEMPLATES)[number];
-export type ContentPostStatus = "draft" | "scheduled" | "published" | "failed" | "cancelled";
+export type ContentPostStatus = "draft" | "scheduled" | "published" | "failed" | "cancelled" | "deleted";
 
 export type ContentPost = {
   id: string;
@@ -214,25 +215,29 @@ export async function updateContentPost(id: string, patch: Partial<ContentPost>)
   return createContentPost({ ...current, ...patch, id, createdAt: current.createdAt });
 }
 
-export async function deleteContentPost(id: string) {
+export async function deleteContentPost(id: string, options: { crmOnly?: boolean } = {}) {
   const current = (await listContentPosts()).find((post) => post.id === id);
   if (!current) return { deleted: false as const, error: "CONTENT_POST_NOT_FOUND" };
-  if (current.status !== "draft" && current.status !== "scheduled") {
+  if (!options.crmOnly && current.status !== "draft" && current.status !== "scheduled") {
     return { deleted: false as const, error: "CONTENT_POST_DELETE_NOT_ALLOWED" };
   }
 
   const db = await getD1Database();
   if (!db) {
+    await deleteImageflowDataForPost(id);
     memoryPosts.delete(id);
     return { deleted: true as const };
   }
 
-  // NEO: Chỉ xóa draft/scheduled trong CRM; không tự xóa bài đã publish trên Meta.
-  await db.prepare("delete from content_publish_jobs where post_id = ?").bind(id).run();
-  await db.prepare("delete from content_publish_logs where post_id = ?").bind(id).run();
-  await db.prepare("delete from content_post_targets where post_id = ?").bind(id).run();
+  // NEO: CRM-only cleanup không gọi Meta; bài thật trên Facebook vẫn được giữ nguyên.
+  await deleteImageflowDataForPost(id);
   await deleteContentMediaForPost(id);
-  await db.prepare("delete from content_posts where id = ?").bind(id).run();
+  await db.batch([
+    db.prepare("delete from content_publish_logs where post_id = ?").bind(id),
+    db.prepare("delete from content_publish_jobs where post_id = ?").bind(id),
+    db.prepare("delete from content_post_targets where post_id = ?").bind(id),
+    db.prepare("delete from content_posts where id = ?").bind(id)
+  ]);
   return { deleted: true as const };
 }
 

@@ -64,6 +64,10 @@ export function ContentPlannerContent() {
   const [editing, setEditing] = useState<EditPostDraft | null>(null);
   const [scheduleDraft, setScheduleDraft] = useState<SchedulePostDraft | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<ContentPost | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deleteAllConfirmed, setDeleteAllConfirmed] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState<{ completed: number; total: number } | null>(null);
   const [publishJobs, setPublishJobs] = useState<PublishJobPreview[]>([]);
   const [publishSettings, setPublishSettings] = useState<PublishSettings>({ autoPublishEnabled: false });
   const [status, setStatus] = useState("Đang tải planner...");
@@ -280,10 +284,49 @@ export function ContentPlannerContent() {
   }
 
   async function deletePost(post: ContentPost) {
-    const response = await fetch(`/api/content/posts/${encodeURIComponent(post.id)}`, { method: "DELETE" });
-    const payload = (await response.json()) as { success: boolean; error?: string };
-    setDeleteCandidate(null);
-    await loadPlanner(payload.success ? "Đã xoá bài khỏi planner." : payload.error || "Xoá bài lỗi.");
+    setDeletingPostId(post.id);
+    try {
+      const response = await fetch(`/api/content/posts/${encodeURIComponent(post.id)}?scope=crm`, { method: "DELETE" });
+      const payload = (await response.json()) as { success: boolean; error?: string };
+      setDeleteCandidate(null);
+      await loadPlanner(
+        payload.success
+          ? "Đã xoá bài khỏi CRM. Bài thật trên Facebook vẫn được giữ nguyên."
+          : payload.error || "Xoá bài lỗi."
+      );
+    } finally {
+      setDeletingPostId(null);
+    }
+  }
+
+  async function deleteAllPosts() {
+    if (!deleteAllConfirmed || posts.length === 0 || deleteProgress) return;
+    const targets = [...posts];
+    let deleted = 0;
+    let failed = 0;
+    setDeleteProgress({ completed: 0, total: targets.length });
+
+    for (const [index, post] of targets.entries()) {
+      try {
+        const response = await fetch(`/api/content/posts/${encodeURIComponent(post.id)}?scope=crm`, { method: "DELETE" });
+        const payload = (await response.json()) as { success: boolean };
+        if (payload.success) deleted += 1;
+        else failed += 1;
+      } catch {
+        failed += 1;
+      }
+      setDeleteProgress({ completed: index + 1, total: targets.length });
+    }
+
+    setDeleteAllOpen(false);
+    setDeleteAllConfirmed(false);
+    setDeleteProgress(null);
+    setPublishJobs([]);
+    await loadPlanner(
+      failed === 0
+        ? `Đã dọn sạch ${deleted} bài khỏi CRM. Bài thật trên Facebook vẫn được giữ nguyên.`
+        : `Đã xoá ${deleted} bài, còn ${failed} bài lỗi cần thử lại.`
+    );
   }
 
   function updateMedia(file: File | null) {
@@ -459,6 +502,10 @@ export function ContentPlannerContent() {
               editing={editing}
               scheduleDraft={scheduleDraft}
               deleteCandidate={deleteCandidate}
+              deletingPostId={deletingPostId}
+              deleteAllOpen={deleteAllOpen}
+              deleteAllConfirmed={deleteAllConfirmed}
+              deleteProgress={deleteProgress}
               onStartEdit={startEdit}
               onEditChange={(patch) => setEditing((current) => (current ? { ...current, ...patch } : current))}
               onEditPageToggle={(pageId, checked) =>
@@ -478,6 +525,14 @@ export function ContentPlannerContent() {
               onRequestDelete={setDeleteCandidate}
               onCancelDelete={() => setDeleteCandidate(null)}
               onConfirmDelete={(post) => void deletePost(post)}
+              onRequestDeleteAll={() => setDeleteAllOpen(true)}
+              onDeleteAllConfirmedChange={setDeleteAllConfirmed}
+              onCancelDeleteAll={() => {
+                if (deleteProgress) return;
+                setDeleteAllOpen(false);
+                setDeleteAllConfirmed(false);
+              }}
+              onConfirmDeleteAll={() => void deleteAllPosts()}
             />
           </div>
 
