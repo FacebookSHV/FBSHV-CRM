@@ -23,7 +23,10 @@
     "check:env": "node scripts/check-env.mjs",
     "cloudflare:check": "node scripts/check-cloudflare-project.mjs",
     "size:check": "node scripts/check-file-sizes.mjs",
-    "hygiene:check": "node scripts/check-project-hygiene.mjs"
+    "hygiene:check": "node scripts/check-project-hygiene.mjs",
+    "imageflow:bridge:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-imageflow-bridge.ps1 -Action Start",
+    "imageflow:bridge:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-imageflow-bridge.ps1 -Action Status",
+    "imageflow:bridge:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-imageflow-bridge.ps1 -Action Stop"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.13.0",

@@ -239,6 +239,16 @@ FBSHV-CRM/
 
 ---
 
+### 2026-06-13 - CRM-owned ImageFlow bridge restored
+
+- Added `scripts/start-imageflow-bridge.ps1` with `Start`, `Run`, `Status`, and `Stop`.
+- Runtime state is stored in `%LOCALAPPDATA%\FBSHV-CRM\imageflow-bridge`; token remains in CRM `.env.local`.
+- Supervisor uses a mutex plus exact supervisor/bridge PID files, waits for `/api/pool/status`, restarts the child bridge after exit, and never stops Chrome globally.
+- Recreated Windows Startup shortcut `FBSHV CRM ImageFlow Watcher.lnk` to call the CRM launcher.
+- Live verification: supervisor PID `57592`, bridge PID `54188`; after stopping only the bridge PID, supervisor restarted it as PID `24616`.
+- Production job `dda79dcf-3c35-4655-8780-e9dabb99df4b` moved `queued -> running`, proving the new bridge claimed the CRM job and reached Pool Scheduler.
+- ImageFlow then returned `Khong tao duoc current_multi_prompt_batch.json`; job correctly ended `needs_user` with zero assets. This is after the CRM bridge handoff and remains an ImageFlow-local blocker.
+
 ### 2026-06-13 - Auto planner alias/caption guard production run
 
 - Deploy `c1218e9a-8ee4-4153-9ba3-0d167571a668` sua dung scope CRM: `Shop Gia Dung Huy Van` duoc map vao slot cu `Kho Gia Dung Huy Van`, va caption AI bi cat giua cau se tu roi ve caption an toan.
@@ -302,6 +312,7 @@ FBSHV-CRM/
 | B1 | SKU `1_BO_CS_300W_K268` chỉ có 1 ảnh trong Product Core | Thêm ảnh thật vào Web TMĐT trước, CRM không tự thêm được |
 | B2 | ChatGPT profile pool có profiles failed | Reset/login CDP profiles trong local ImageFlow |
 | B3 | Render profile `6` không có CDP port mapping | Map port hoặc xóa profile `6` khỏi active pool |
+| B4 | ImageFlow local không tạo được `current_multi_prompt_batch.json` | Sửa pipeline local ImageFlow; CRM bridge đã live-claim job và trả `needs_user` đúng |
 | B4 | `NEED_USER_META_UI_ACTION` chưa xác nhận | User mở `developers.facebook.com` → App `1296077039298909` → kiểm App Domains, Webhook fields |
 | B5 | `NEED_USER_RECONNECT_FACEBOOK` | Bấm Connect Facebook lại để token nhận scope `pages_manage_posts` |
 | B6 | ChatGPT prompt profile `4` fail khi chạy YUHAO | Reset/login profile `4` trong ImageFlow local rồi tạo lại job; CRM guard đã giữ asset=0, không upload ảnh cũ |
@@ -352,6 +363,7 @@ FBSHV-CRM/
 
 | Version | Ngày | Nội dung chính |
 |---|---|---|
+| `no-deploy` | 2026-06-13 | Rebuild CRM-owned ImageFlow bridge supervisor + Windows Startup shortcut; restart/claim production verified |
 | `c1218e9a` | 2026-06-13 | Auto planner map dung page `Shop Gia Dung Huy Van`, chan caption AI bi cut giua cau; production run tao 2 bai scheduled + 2 image jobs, local ImageFlow dang `needs_user` |
 | `5e3dbc67` | 2026-06-13 | Content Planner một màn hình: AI soạn bài, tạo ảnh AI qua Pool Scheduler, panel tự động đăng 4 bài/ngày, lộ trình Fanpage; bật `AUTO_PUBLISH_POSTS_ENABLED=true`, production desktop/tablet/mobile pass |
 | `e357c2b5` | 2026-06-13 | Content Planner có xoá từng bài + dọn trống CRM-only; production xoá sạch 31 record, API/D1/UI responsive readback đều pass |

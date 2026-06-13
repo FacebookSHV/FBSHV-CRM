@@ -49,7 +49,7 @@ Chạy một lượt:
 
 ```powershell
 $env:FBSHV_CRM_BASE_URL = "https://fbshv-crm.ngchihuy.workers.dev"
-$env:IMAGEFLOW_BRIDGE_TOKEN = "<secret local>"
+# IMAGEFLOW_BRIDGE_TOKEN is loaded from the existing CRM .env.local file.
 $env:IMAGEFLOW_WORK_DIR = "D:\codex_manager_v3.1\tools\imageflow\work\crm_bridge"
 node .\scripts\imageflow-bridge.mjs --once
 ```
@@ -61,6 +61,28 @@ node .\scripts\imageflow-bridge.mjs --watch
 ```
 
 Không in token ra log. `IMAGEFLOW_BRIDGE_TOKEN` chỉ lấy từ local env/shell, không commit.
+
+## CRM Supervisor
+
+CRM owns the persistent local bridge launcher:
+
+```powershell
+npm run imageflow:bridge:start
+npm run imageflow:bridge:status
+npm run imageflow:bridge:stop
+```
+
+`scripts/start-imageflow-bridge.ps1`:
+
+- loads `IMAGEFLOW_BRIDGE_TOKEN` from CRM `.env.local`
+- waits for `http://127.0.0.1:7096/api/pool/status`
+- starts only `scripts/imageflow-bridge.mjs --watch`
+- uses a mutex and PID files to prevent duplicate bridge processes
+- restarts the bridge if the child process exits
+- stops only the recorded supervisor/bridge PIDs
+- stores runtime PID/log files under `%LOCALAPPDATA%\FBSHV-CRM\imageflow-bridge`
+
+Windows Startup shortcut `FBSHV CRM ImageFlow Watcher.lnk` must point to this CRM launcher. The shortcut does not contain the bridge token.
 
 ## Adapter CRM
 
