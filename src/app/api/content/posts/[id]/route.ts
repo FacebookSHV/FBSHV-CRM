@@ -1,6 +1,8 @@
 import { fail, failFromError, ok } from "@/lib/api-response";
 import { replaceContentPostTargets } from "@/lib/content-publishing";
-import { deleteContentPost, updateContentPost } from "@/lib/content-planner";
+import { deleteContentPost, listContentPosts, updateContentPost } from "@/lib/content-planner";
+import { listPublishJobs } from "@/lib/content-publishing";
+import { deletePagePost } from "@/lib/facebook/publishing";
 import type { ContentPost } from "@/lib/content-planner";
 
 export async function PATCH(
@@ -25,8 +27,20 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
-  const crmOnly = new URL(request.url).searchParams.get("scope") === "crm";
+  const scope = new URL(request.url).searchParams.get("scope");
+  const crmOnly = scope === "crm";
   try {
+    if (scope === "facebook") {
+      const post = (await listContentPosts()).find((item) => item.id === id);
+      if (!post) return fail("Không tìm thấy bài viết.", 404, "CONTENT_POST_NOT_FOUND");
+      const publishedJob = (await listPublishJobs(id)).find((job) => job.externalPostId);
+      if (!publishedJob?.externalPostId) {
+        return fail("Bài chưa có Meta post ID để xóa.", 400, "META_POST_ID_MISSING");
+      }
+      await deletePagePost({ pageId: publishedJob.pageId || post.pageId, externalPostId: publishedJob.externalPostId });
+      const result = await deleteContentPost(id, { crmOnly: true });
+      return ok({ deleted: result.deleted, scope: "facebook", externalPostId: publishedJob.externalPostId });
+    }
     const result = await deleteContentPost(id, { crmOnly });
     if (!result.deleted) {
       const message =

@@ -6,8 +6,11 @@ const createContentPost = vi.fn();
 const deleteContentPost = vi.fn();
 const updateContentPost = vi.fn();
 const listContentPosts = vi.fn();
+const listContentMedia = vi.fn();
 const addContentPostTargets = vi.fn();
 const replaceContentPostTargets = vi.fn();
+const listPublishJobs = vi.fn();
+const deletePagePost = vi.fn();
 const ensureImageflowJobForPost = vi.fn();
 
 vi.mock("@/lib/content-planner", () => ({
@@ -17,11 +20,16 @@ vi.mock("@/lib/content-planner", () => ({
   listContentPosts
 }));
 
+vi.mock("@/lib/content-media", () => ({ listContentMedia }));
+
 vi.mock("@/lib/content-publishing", () => ({
   addContentPostTargets,
   replaceContentPostTargets,
+  listPublishJobs,
   isAutoPublishPostsEnabled: vi.fn(() => false)
 }));
+
+vi.mock("@/lib/facebook/publishing", () => ({ deletePagePost }));
 
 vi.mock("@/lib/imageflow/store", () => ({
   ensureImageflowJobForPost
@@ -41,6 +49,9 @@ describe("Content Planner ImageFlow routing", () => {
     addContentPostTargets.mockResolvedValue(["page_1"]);
     ensureImageflowJobForPost.mockResolvedValue({ id: "job_pool_1", status: "queued" });
     deleteContentPost.mockResolvedValue({ deleted: true });
+    deletePagePost.mockResolvedValue({ deleted: true });
+    listPublishJobs.mockResolvedValue([]);
+    listContentMedia.mockResolvedValue([]);
     listContentPosts.mockResolvedValue([
       {
         id: "post_pool_1",
@@ -101,6 +112,19 @@ describe("Content Planner ImageFlow routing", () => {
     expect(ensureImageflowJobForPost).not.toHaveBeenCalled();
   });
 
+  it("API danh sách bài trả ảnh và trạng thái đăng để dựng preview", async () => {
+    listContentMedia.mockResolvedValue([{ id: "media_1", publicUrl: "https://crm.test/image.jpg", status: "uploaded" }]);
+    listPublishJobs.mockResolvedValue([{ id: "publish_1", status: "scheduled", pageId: "page_1" }]);
+    const { GET } = await import("@/app/api/content/posts/route");
+    const response = await GET();
+    const payload = await response.json() as {
+      data: { posts: Array<{ media: unknown[]; publishJobs: unknown[] }> };
+    };
+
+    expect(payload.data.posts[0].media).toHaveLength(1);
+    expect(payload.data.posts[0].publishJobs).toHaveLength(1);
+  });
+
   it("nút Tạo ảnh AI chỉ xếp lại đúng job Pool Scheduler theo postId", async () => {
     const { POST } = await import("@/app/api/content/posts/[id]/imageflow/route");
     const response = await POST(
@@ -116,6 +140,21 @@ describe("Content Planner ImageFlow routing", () => {
       success: true,
       data: { imageflowJob: { id: "job_pool_1", status: "queued" } }
     });
+  });
+
+  it("xóa bài đã đăng khỏi Meta trước khi dọn dữ liệu CRM", async () => {
+    listPublishJobs.mockResolvedValue([
+      { pageId: "page_1", externalPostId: "page_1_post_1", status: "published" }
+    ]);
+    const { DELETE } = await import("@/app/api/content/posts/[id]/route");
+    const response = await DELETE(
+      new Request("http://localhost/api/content/posts/post_pool_1?scope=facebook", { method: "DELETE" }),
+      { params: Promise.resolve({ id: "post_pool_1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(deletePagePost).toHaveBeenCalledWith({ pageId: "page_1", externalPostId: "page_1_post_1" });
+    expect(deleteContentPost).toHaveBeenCalledWith("post_pool_1", { crmOnly: true });
   });
 
   it("xoá CRM-only truyền cờ rõ ràng và không gọi Meta", async () => {
@@ -138,6 +177,9 @@ describe("CRM chỉ dùng Pool Scheduler của ImageFlow", () => {
   it("adapter không đọc config hoặc truyền profile ID trực tiếp", async () => {
     const adapter = await readFile(path.join(process.cwd(), "scripts", "imageflow-crm-adapter.mjs"), "utf8");
     expect(adapter).toContain("/api/pool/status");
+    expect(adapter).toContain('"prompt_core_migration_state.json"');
+    expect(adapter).toContain("/^prompt_manifest_.*\\.json$/i");
+    expect(adapter).not.toContain("if (error && finalPaths.length < requestedCount)");
     expect(adapter).not.toContain("readImageflowProfiles");
     expect(adapter).not.toContain("IMAGEFLOW_CONFIG_PATH");
     expect(adapter).not.toContain("prompt_profile_ids");

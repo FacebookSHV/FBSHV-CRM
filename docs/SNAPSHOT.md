@@ -6,9 +6,9 @@
 -->
 
 **Snapshot version:** `2026-06-13`
-**Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | content_planner_ai_only_auto_publish_verified | content_planner_ab_page_selection_verified | pool_scheduler_local_needs_user`
+**Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | content_planner_visual_review_verified | content_planner_ai_only_auto_publish_verified | pool_scheduler_crm_bridge_5_assets_verified`
 **Production URL:** `https://fbshv-crm.ngchihuy.workers.dev`
-**Latest deploy:** `ac3fc1c7-539a-4291-a290-28821ff50c4a` (Auto planner creates posts only from valid AI caption; no template caption fallback)
+**Latest deploy:** `9135de27-1164-4cc3-a41c-5b2e9dc085dd` (Visual review for scheduled/published posts, media album and Meta post deletion)
 **Cloudflare account:** `3d1e8c3bd1f4f9ace7388e60dd11fbed` ← KHÔNG ĐỔI
 **Worker name:** `fbshv-crm`
 **D1:** `fbshv_crm_db` · `218d0eab-7734-4fda-91b9-e3e2604e6c86`
@@ -29,7 +29,7 @@
 | Product Sync từ Web TMĐT | ✅ PRODUCTION | Search SKU/name, persists F5 |
 | Orders CRM | ✅ PRODUCTION | Qua ecommerce provider, không tự trừ tồn |
 | Page Audit | ✅ PRODUCTION | Scores: 90 / 86 / 90 |
-| Content Planner | ✅ PRODUCTION · AI-ONLY AUTO PUBLISH + A/B PAGE SELECTION VERIFIED | Một màn hình cho sản phẩm, AI soạn bài, tạo ảnh AI qua Pool Scheduler, lịch đăng, tự động 4 bài/ngày theo đúng Fanpage người dùng chọn; không dùng caption mẫu trong auto planner |
+| Content Planner | ✅ PRODUCTION · VISUAL REVIEW + AI-ONLY VERIFIED | Cùng màn hình có nhóm bài sắp đăng/đã đăng, preview ảnh + caption + Fanpage, album chi tiết, sửa/lịch/đăng; auto planner không dùng caption mẫu |
 | AI Settings (Gemini 1-5) | ✅ PRODUCTION | Key 1,2 valid · Key 3 permission_denied |
 | AI Assistant | ✅ PRODUCTION | Gemini real, fallback template khi key lỗi |
 | Facebook Ads (3 accounts) | ✅ PRODUCTION · live-write PAUSED | Không tự ACTIVE • UI workspace light/beige refresh local verified 2026-06-11 |
@@ -237,6 +237,19 @@ FBSHV-CRM/
 
 **Rủi ro còn lại:** ChatGPT profile pool có profiles failed. Nếu job liên tiếp fail → reset/login CDP profiles trước khi debug CRM payload.
 
+### 2026-06-13 - CRM bridge stale prompt cleanup verified
+
+- Root cause thực tế: CRM cập nhật `claimPolicy` trong `product_package.json` nhưng adapter giữ lại `meta/image_prompts.json`, `prompt_core_migration_state.json` và `prompt_manifest_*.json` cũ; ImageFlow dừng với `PROMPT_MANIFEST_CLAIM_POLICY_CONFLICT`.
+- Adapter CRM nay xóa đúng các prompt artifact dẫn xuất trước mỗi lượt chạy và không coi `error` cũ là lỗi kết thúc khi queue vẫn đang `prompting` hoặc `rendering`.
+- Visible production run job `dda79dcf-3c35-4655-8780-e9dabb99df4b`: Gemini prompt hoàn tất, ChatGPT render `5/5`, CRM job `completed`, upload đủ `5` assets.
+- Chỉ sửa CRM; không sửa source, account runtime, profile hoặc session của ImageFlow.
+
+### 2026-06-13 - Content visual review production verified
+
+- API `/api/content/posts` trả media và publish jobs theo từng bài; UI tách `Bài sắp đăng` / `Bài đã đăng`, có ảnh, caption, Fanpage, lịch và modal album đầy đủ.
+- Production pass desktop `1366`, tablet `820`, mobile `390`; không tràn ngang. Năm asset R2 đều HTTP `200` và tải đủ kích thước thật.
+- Bài test caption mẫu cũ đã bị xoá khỏi Facebook và CRM bằng external post ID `1247717261945343_1315999797265992`.
+
 ---
 
 ### 2026-06-13 - CRM-owned ImageFlow bridge restored
@@ -323,9 +336,7 @@ FBSHV-CRM/
 | B1 | SKU `1_BO_CS_300W_K268` chỉ có 1 ảnh trong Product Core | Thêm ảnh thật vào Web TMĐT trước, CRM không tự thêm được |
 | B2 | ChatGPT profile pool có profiles failed | Reset/login CDP profiles trong local ImageFlow |
 | B3 | Render profile `6` không có CDP port mapping | Map port hoặc xóa profile `6` khỏi active pool |
-| B4 | ImageFlow local không tạo được `current_multi_prompt_batch.json` | Sửa pipeline local ImageFlow; CRM bridge đã live-claim job và trả `needs_user` đúng |
 | B4 | `NEED_USER_META_UI_ACTION` chưa xác nhận | User mở `developers.facebook.com` → App `1296077039298909` → kiểm App Domains, Webhook fields |
-| B5 | `NEED_USER_RECONNECT_FACEBOOK` | Bấm Connect Facebook lại để token nhận scope `pages_manage_posts` |
 | B6 | ChatGPT prompt profile `4` fail khi chạy YUHAO | Reset/login profile `4` trong ImageFlow local rồi tạo lại job; CRM guard đã giữ asset=0, không upload ảnh cũ |
 | B7 | Nếu local ImageFlow `127.0.0.1:7096` không tự lên sau reboot thì supervisor watcher sẽ chờ vô hạn | Kiểm `ImageFlow Local Stack.lnk` và local stack launcher nếu máy đổi startup policy |
 
@@ -374,29 +385,11 @@ FBSHV-CRM/
 
 | Version | Ngày | Nội dung chính |
 |---|---|---|
+| `9135de27` | 2026-06-13 | Hiển thị ảnh + caption cho bài sắp đăng/đã đăng, modal album; API trả media/publish jobs; xoá bài test cũ trên Meta + CRM; responsive pass |
+| `no-deploy` | 2026-06-13 | CRM adapter dọn stale prompt manifest/claim policy, bỏ false-fail từ error cũ; visible Pool Scheduler run hoàn tất 5/5 ảnh và upload 5 assets |
 | `ac3fc1c7` | 2026-06-13 | Auto planner chỉ tạo bài khi AI trả caption hợp lệ; AI lỗi/cụt thì giữ slot, không dùng caption mẫu |
 | `05a12353` | 2026-06-13 | Content Planner auto run dùng đúng Fanpage người dùng chọn; 2 page được chia SKU/caption khác nhau để test A/B page kéo view |
 | `no-deploy` | 2026-06-13 | Rebuild CRM-owned ImageFlow bridge supervisor + Windows Startup shortcut; restart/claim production verified |
-| `c1218e9a` | 2026-06-13 | Auto planner map dung page `Shop Gia Dung Huy Van`, chan caption AI bi cut giua cau; production run tao 2 bai scheduled + 2 image jobs, local ImageFlow dang `needs_user` |
-| `5e3dbc67` | 2026-06-13 | Content Planner một màn hình: AI soạn bài, tạo ảnh AI qua Pool Scheduler, panel tự động đăng 4 bài/ngày, lộ trình Fanpage; bật `AUTO_PUBLISH_POSTS_ENABLED=true`, production desktop/tablet/mobile pass |
-| `e357c2b5` | 2026-06-13 | Content Planner có xoá từng bài + dọn trống CRM-only; production xoá sạch 31 record, API/D1/UI responsive readback đều pass |
-| `02a04285` | 2026-06-13 | Pool Scheduler CRM-only production verified: Content Planner tự xếp job ảnh theo `postId`, bridge chỉ transport nền, adapter không tự chọn profile; Cloudflare gate pass, UI/API production pass |
-| `no-deploy` | 2026-06-11 | Ghi rule cứng `không chạy chồng nhiều job trên cùng profile` vào CRM/ImageFlow AGENTS + snapshot |
-| `no-deploy` | 2026-06-11 | Ổn định autostart cho `ImageFlow Bridge` watcher: thêm supervisor, wiring startup launcher, verify process/log thật |
-| `no-deploy` | 2026-06-11 | Resume luồng `ImageFlow Bridge`: gỡ stale local queue, clear remote lock, xác nhận job `queued -> running`, bật lại watcher nền |
-| `no-deploy` | 2026-06-11 | Reset dữ liệu `ImageFlow Bridge` trên production D1 + local `work/crm_bridge`; verify API jobs rỗng |
-| `no-deploy` | 2026-06-11 | UI refresh đồng bộ cho `Inbox/Comment` và `Facebook Ads`; verify local desktop/tablet/mobile bằng Chrome headful + CDP |
-| `57ac0f0d` | 2026-06-10 | Patch External Core timeout/retry, deploy lại, signed Web TMĐT webhook `product.updated` readback completed |
-| `eeefa6e2` | 2026-06-10 | Deploy Core Integration V2 Sprint 1: migration `0009` remote, cron mỗi phút, health/jobs UI/API smoke pass production |
-| `no-deploy` | 2026-06-10 | Sprint 1 local complete + Commerce Core: jobs/health UI, quick-ack TMĐT, order contract/read-model/status processor |
-| `no-deploy` | 2026-06-10 | Core Integration Phase 2 schema/store: integration events/jobs/audit, event dedup, job idempotency, atomic claim SQL |
-| `no-deploy` | 2026-06-10 | Core Integration Phase 1: runtime guard, runtime health API, External Core timeout/retry/circuit breaker |
-| `no-deploy` | 2026-06-10 | ImageFlow bridge single-run mặc định; lockedUntil 35 phút; adapter không poll `open-output-folder` |
-| `d4d06023` | 2026-06-10 | ImageFlow bridge recovery/backoff/adapter-timeout; watcher restarted with empty-streak backoff |
-| `232a03d6` | 2026-06-09 | ImageFlow bridge safe mode: sequential polling, single-profile limits, atomic job claim |
-| `no-deploy` | 2026-06-09 | Consolidate snapshot protocol; old status docs moved to `docs/archive/` |
-| `4c84f434` | 2026-06-06 | AI template catalog, landing page TikTok/Shopee/Facebook |
-| `ca8f4da9` | 2026-06-06 | Stricter source-photo render guard |
 
 ---
 

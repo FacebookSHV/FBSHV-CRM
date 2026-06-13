@@ -114,3 +114,17 @@ export async function createAlbumPost(input: AlbumPublishInput) {
     return { externalPostId: post.id || uploaded[0] || "" };
   });
 }
+
+export async function deletePagePost(input: { pageId: string; externalPostId: string }) {
+  const page = await getPageToken(input.pageId);
+  return withMetaPermission("pages_manage_posts", async () => {
+    const url = new URL(graphUrl(page.graphApiVersion, `/${encodeURIComponent(input.externalPostId)}`));
+    url.searchParams.set("access_token", page.token);
+    const response = await fetch(url, { method: "DELETE" });
+    const payload = (await response.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
+    if (!response.ok || payload.error || payload.success !== true) {
+      throw new Error(payload.error?.message || "Meta delete post lỗi.");
+    }
+    return { deleted: true };
+  });
+}

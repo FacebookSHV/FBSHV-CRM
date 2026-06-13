@@ -15,6 +15,8 @@ export type ContentPost = ContentIdea & {
   status: "draft" | "scheduled" | "published" | "failed" | "cancelled" | "deleted";
   scheduledAt?: string | null;
   updatedAt: string;
+  media?: Array<{ id: string; publicUrl: string; fileName: string; status: string }>;
+  publishJobs?: PublishJobPreview[];
 };
 
 export type FacebookPage = {

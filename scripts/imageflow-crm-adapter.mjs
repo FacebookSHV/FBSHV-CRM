@@ -323,7 +323,6 @@ async function waitForFinalImages(queueId, requestedCount, waitStartedAt) {
       return finalPaths.slice(0, requestedCount);
     }
     if (error && (status === "failed" || promptStatus === "failed" || renderStatus === "failed")) throw new Error(error);
-    if (error && finalPaths.length < requestedCount) throw new Error(error);
     await new Promise((resolve) => setTimeout(resolve, Number.isFinite(pollIntervalMs) ? pollIntervalMs : 10000));
   }
   throw new Error(lastError || `Timed out waiting for ImageFlow final images for queue ${queueId}`);
@@ -379,6 +378,7 @@ async function clearStaleImageflowOutputs(queueItem) {
   const packagePath = String(queueItem?.product_package_path || "").trim();
   if (!packagePath) return;
   const productDir = productDirFromPackagePath(packagePath);
+  const metaDir = path.join(productDir, "meta");
   await rm(path.join(productDir, "chatgpt_cdp_renders"), { recursive: true, force: true }).catch(() => {});
   await rm(path.join(productDir, "output", "chatgpt_cdp_renders"), { recursive: true, force: true }).catch(() => {});
   await rm(path.join(productDir, "output", "image_renders"), { recursive: true, force: true }).catch(() => {});
@@ -388,6 +388,17 @@ async function clearStaleImageflowOutputs(queueItem) {
     "chatgpt_cdp_prompt_response.txt"
   ]) {
     await rm(path.join(productDir, fileName), { force: true }).catch(() => {});
+  }
+
+  // NEO: Buộc ImageFlow tạo lại prompt theo claim policy mới của CRM.
+  for (const fileName of ["image_prompts.json", "prompt_core_migration_state.json"]) {
+    await rm(path.join(metaDir, fileName), { force: true }).catch(() => {});
+  }
+  const metaEntries = await readdir(metaDir, { withFileTypes: true }).catch(() => []);
+  for (const entry of metaEntries) {
+    if (entry.isFile() && /^prompt_manifest_.*\.json$/i.test(entry.name)) {
+      await rm(path.join(metaDir, entry.name), { force: true }).catch(() => {});
+    }
   }
 }
 

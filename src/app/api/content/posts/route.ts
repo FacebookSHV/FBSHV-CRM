@@ -1,6 +1,7 @@
 import { failFromError, ok } from "@/lib/api-response";
-import { addContentPostTargets } from "@/lib/content-publishing";
+import { addContentPostTargets, listPublishJobs } from "@/lib/content-publishing";
 import { createContentPost, listContentPosts } from "@/lib/content-planner";
+import { listContentMedia } from "@/lib/content-media";
 import type { ContentPost } from "@/lib/content-planner";
 import { queueContentPostImageflow } from "@/lib/content-imageflow";
 import { getContentAutomationStatus } from "@/lib/content-runtime";
@@ -8,8 +9,16 @@ import { getContentAutomationStatus } from "@/lib/content-runtime";
 export async function GET() {
   try {
     const publishSettings = await getContentAutomationStatus();
+    const posts = await listContentPosts();
+    const postsWithPreview = await Promise.all(
+      posts.map(async (post) => ({
+        ...post,
+        media: await listContentMedia(post.id),
+        publishJobs: await listPublishJobs(post.id)
+      }))
+    );
     return ok({
-      posts: await listContentPosts(),
+      posts: postsWithPreview,
       // NEO: UI phải biết cờ publish thật để không hiển thị nhầm trạng thái dry-run.
       publishSettings
     });

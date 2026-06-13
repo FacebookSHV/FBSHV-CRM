@@ -1,7 +1,7 @@
 "use client";
 
-import { LoaderCircle, Pencil, Save, Trash2, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { CalendarClock, Eye, ImageIcon, LoaderCircle, Pencil, Save, Trash2, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { ProductSearchPicker } from "@/components/products/product-search-picker";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -83,6 +83,7 @@ function formatSchedule(value?: string | null) {
 
 function PlannerListRow({
   post,
+  pages,
   selectedPageIds,
   deletingPostId,
   onStartEdit,
@@ -91,6 +92,7 @@ function PlannerListRow({
   onRequestDelete
 }: {
   post: ContentPost;
+  pages: FacebookPage[];
   selectedPageIds: string[];
   deletingPostId: string | null;
   onStartEdit: (post: ContentPost) => void;
@@ -98,58 +100,191 @@ function PlannerListRow({
   onPublish: (post: ContentPost) => void;
   onRequestDelete: (post: ContentPost) => void;
 }) {
+  const [detailOpen, setDetailOpen] = useState(false);
   const deleting = deletingPostId === post.id;
+  const media = post.media ?? [];
+  const pageNames = pages.find((page) => page.id === post.pageId || page.externalPageId === post.pageId)?.name ?? "";
+  const isPublished = post.status === "published";
+
   return (
-    <article className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-stone-500">
-          <Pencil className="h-4 w-4" aria-hidden="true" />
+    <article className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+      <div className="relative aspect-[4/3] overflow-hidden bg-stone-100">
+        {media[0]?.publicUrl ? (
+          // NEO: Preview ảnh thật để người vận hành duyệt bài trước khi đăng
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={media[0].publicUrl} alt={`Ảnh bài ${post.title}`} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-stone-400">
+            <ImageIcon className="h-8 w-8" aria-hidden="true" />
+            <span className="text-xs font-medium">Chưa có ảnh</span>
+          </div>
+        )}
+        {media.length > 1 ? (
+          <span className="absolute right-2 top-2 rounded-full bg-stone-950/75 px-2 py-1 text-xs font-semibold text-white">
+            {media.length} ảnh
+          </span>
+        ) : null}
+      </div>
+
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill tone={statusTone(post.status)}>{statusLabel(post.status)}</StatusPill>
+              {pageNames ? <span className="truncate text-xs font-medium text-stone-500">{pageNames}</span> : null}
+            </div>
+            <h3 className="mt-2 line-clamp-2 text-sm font-semibold leading-5 text-stone-900">{post.title}</h3>
+          </div>
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-stone-900">{post.title}</h3>
-            <StatusPill tone={statusTone(post.status)}>{statusLabel(post.status)}</StatusPill>
-          </div>
-          <div className="mt-1 text-xs text-stone-500">
-            {formatSchedule(post.scheduledAt)}{post.productSku ? ` • ${post.productSku}` : ""}
-          </div>
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-stone-600">{post.caption}</p>
+
+        <p className="mt-2 line-clamp-4 whitespace-pre-line text-sm leading-5 text-stone-600">{post.caption}</p>
+
+        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-500">
+          <span className="inline-flex items-center gap-1">
+            <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+            {formatSchedule(post.scheduledAt)}
+          </span>
+          {post.productSku ? <span>SKU {post.productSku}</span> : null}
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setDetailOpen(true)}
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-200 px-3 text-xs font-semibold text-stone-700"
+          >
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+            Xem đầy đủ
+          </button>
+          {!isPublished ? (
+            <button
+              type="button"
+              onClick={() => onStartEdit(post)}
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-200 px-3 text-xs font-semibold text-stone-700"
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              Chỉnh sửa
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onRequestDelete(post)}
+              disabled={deleting}
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-700 disabled:opacity-50"
+            >
+              {deleting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+              {deleting ? "Đang xoá..." : "Xoá khỏi CRM"}
+            </button>
+          )}
+          {!isPublished ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onOpenSchedule(post)}
+                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700"
+                title={`Chỉnh lịch cho ${selectedPageIds.length || 1} page`}
+              >
+                Đổi lịch
+              </button>
+              <button
+                type="button"
+                onClick={() => onPublish(post)}
+                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white"
+              >
+                Đăng ngay
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => onStartEdit(post)}
-          className="inline-flex h-9 items-center justify-center rounded-xl border border-stone-200 px-3 text-xs font-semibold text-stone-700"
-        >
-          Sửa
-        </button>
-        <button
-          type="button"
-          onClick={() => onOpenSchedule(post)}
-          className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700"
-          title={`Chỉnh lịch cho ${selectedPageIds.length || 1} page`}
-        >
-          Lịch
-        </button>
-        <button
-          type="button"
-          onClick={() => onPublish(post)}
-          className="inline-flex h-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700"
-        >
-          Gửi
-        </button>
-        <button
-          type="button"
-          onClick={() => onRequestDelete(post)}
-          disabled={deleting}
-          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-700 disabled:opacity-50"
-        >
-          {deleting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
-          {deleting ? "Đang xoá..." : "Xoá khỏi CRM"}
-        </button>
-      </div>
+
+      {detailOpen ? (
+        <Modal title="Duyệt nội dung bài đăng" onClose={() => setDetailOpen(false)}>
+          <div className="grid gap-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {media.length > 0 ? media.map((item) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={item.id}
+                  src={item.publicUrl}
+                  alt={item.fileName || post.title}
+                  className="aspect-square w-full rounded-xl border border-stone-200 object-cover"
+                />
+              )) : (
+                <div className="col-span-full flex min-h-40 items-center justify-center rounded-xl border border-dashed border-stone-300 text-sm text-stone-500">
+                  Bài này chưa có ảnh.
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusPill tone={statusTone(post.status)}>{statusLabel(post.status)}</StatusPill>
+                {pageNames ? <span className="text-sm font-medium text-stone-600">{pageNames}</span> : null}
+              </div>
+              <h4 className="mt-3 text-base font-semibold text-stone-900">{post.title}</h4>
+              <p className="mt-2 whitespace-pre-line text-sm leading-6 text-stone-700">{post.caption}</p>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
     </article>
+  );
+}
+
+function PostGroup({
+  title,
+  description,
+  posts,
+  pages,
+  selectedPageIds,
+  deletingPostId,
+  onStartEdit,
+  onOpenSchedule,
+  onPublish,
+  onRequestDelete
+}: {
+  title: string;
+  description: string;
+  posts: ContentPost[];
+  pages: FacebookPage[];
+  selectedPageIds: string[];
+  deletingPostId: string | null;
+  onStartEdit: (post: ContentPost) => void;
+  onOpenSchedule: (post: ContentPost) => void;
+  onPublish: (post: ContentPost) => void;
+  onRequestDelete: (post: ContentPost) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-[#f7f4ec] p-3">
+      <div className="mb-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-stone-900">{title}</h3>
+          <StatusPill tone="neutral">{posts.length} bài</StatusPill>
+        </div>
+        <p className="mt-1 text-xs leading-5 text-stone-500">{description}</p>
+      </div>
+      {posts.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-stone-300 bg-white px-4 py-8 text-center text-sm text-stone-500">
+          Chưa có bài trong nhóm này.
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+          {posts.map((post) => (
+            <PlannerListRow
+              key={post.id}
+              post={post}
+              pages={pages}
+              selectedPageIds={selectedPageIds}
+              deletingPostId={deletingPostId}
+              onStartEdit={onStartEdit}
+              onOpenSchedule={onOpenSchedule}
+              onPublish={onPublish}
+              onRequestDelete={onRequestDelete}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -183,18 +318,21 @@ export function ContentPlannerPostList({
   onCancelDeleteAll,
   onConfirmDeleteAll
 }: ContentPlannerPostListProps) {
+  const [activeView, setActiveView] = useState<"scheduled" | "published">("scheduled");
   const schedulePost = scheduleDraft ? posts.find((post) => post.id === scheduleDraft.id) ?? null : null;
   const orderedPosts = [...posts].sort((left, right) => {
     const leftValue = left.scheduledAt || left.updatedAt || left.id;
     const rightValue = right.scheduledAt || right.updatedAt || right.id;
     return rightValue.localeCompare(leftValue);
   });
+  const scheduledPosts = orderedPosts.filter((post) => post.status !== "published");
+  const publishedPosts = orderedPosts.filter((post) => post.status === "published");
 
   return (
     <section className="rounded-[24px] border border-stone-200 bg-[#fbfaf6] p-3">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-stone-900">Bài trên Content Planner</h2>
+          <h2 className="text-sm font-semibold text-stone-900">Duyệt bài trước và sau khi đăng</h2>
           <div className="mt-1 flex flex-wrap gap-2">
             <StatusPill tone="warning">{posts.filter((post) => post.status === "draft").length} nháp</StatusPill>
             <StatusPill tone="success">{posts.filter((post) => post.status === "scheduled").length} lịch</StatusPill>
@@ -212,25 +350,63 @@ export function ContentPlannerPostList({
         </button>
       </div>
 
-      <div className="space-y-2">
-        {orderedPosts.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-stone-300 bg-white px-4 py-6 text-sm text-stone-500">
-            Chưa có bài nháp hoặc lịch đăng.
-          </div>
-        ) : (
-          orderedPosts.map((post) => (
-            <PlannerListRow
-              key={post.id}
-              post={post}
-              selectedPageIds={selectedPageIds}
-              deletingPostId={deletingPostId}
-              onStartEdit={onStartEdit}
-              onOpenSchedule={onOpenSchedule}
-              onPublish={onPublish}
-              onRequestDelete={onRequestDelete}
-            />
-          ))
-        )}
+      <div className="mb-3 grid grid-cols-2 gap-2 xl:hidden">
+        <button
+          type="button"
+          onClick={() => setActiveView("scheduled")}
+          className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${activeView === "scheduled" ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-white text-stone-700"}`}
+        >
+          Sắp đăng ({scheduledPosts.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveView("published")}
+          className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${activeView === "published" ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-white text-stone-700"}`}
+        >
+          Đã đăng ({publishedPosts.length})
+        </button>
+      </div>
+
+      <div className="xl:hidden">
+        <PostGroup
+          title={activeView === "scheduled" ? "Bài sắp đăng" : "Bài đã đăng"}
+          description={activeView === "scheduled" ? "Xem ảnh, đọc lại nội dung và chỉnh sửa trước giờ đăng." : "Đối chiếu ảnh và nội dung đã gửi lên Fanpage."}
+          posts={activeView === "scheduled" ? scheduledPosts : publishedPosts}
+          pages={pages}
+          selectedPageIds={selectedPageIds}
+          deletingPostId={deletingPostId}
+          onStartEdit={onStartEdit}
+          onOpenSchedule={onOpenSchedule}
+          onPublish={onPublish}
+          onRequestDelete={onRequestDelete}
+        />
+      </div>
+
+      <div className="hidden gap-3 xl:grid xl:grid-cols-2">
+        <PostGroup
+          title="Bài sắp đăng"
+          description="Xem ảnh, đọc lại nội dung và chỉnh sửa trước giờ đăng."
+          posts={scheduledPosts}
+          pages={pages}
+          selectedPageIds={selectedPageIds}
+          deletingPostId={deletingPostId}
+          onStartEdit={onStartEdit}
+          onOpenSchedule={onOpenSchedule}
+          onPublish={onPublish}
+          onRequestDelete={onRequestDelete}
+        />
+        <PostGroup
+          title="Bài đã đăng"
+          description="Đối chiếu ảnh và nội dung đã gửi lên Fanpage."
+          posts={publishedPosts}
+          pages={pages}
+          selectedPageIds={selectedPageIds}
+          deletingPostId={deletingPostId}
+          onStartEdit={onStartEdit}
+          onOpenSchedule={onOpenSchedule}
+          onPublish={onPublish}
+          onRequestDelete={onRequestDelete}
+        />
       </div>
 
       {publishJobs.length > 0 ? (
