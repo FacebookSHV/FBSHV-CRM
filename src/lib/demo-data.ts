@@ -19,6 +19,10 @@ export const demoProducts = [
     discountPercent: 16.7,
     currency: "VND",
     imageUrl: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64",
+    images: [
+      "https://images.unsplash.com/photo-1558618666-fcd25c85cd64",
+      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7"
+    ],
     description: "Sản phẩm kiểm thử dùng để kiểm tra đồng bộ, giá SKU và tồn kho.",
     status: "active",
     stock: 100,
@@ -41,6 +45,10 @@ export const demoProducts = [
     discountPercent: 22.5,
     currency: "VND",
     imageUrl: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c",
+    images: [
+      "https://images.unsplash.com/photo-1507473885765-e6ed057f782c",
+      "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15"
+    ],
     description: "Đèn LED điều khiển qua app, phù hợp nội dung livestream.",
     status: "active",
     stock: 46,

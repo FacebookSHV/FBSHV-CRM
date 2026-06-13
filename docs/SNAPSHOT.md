@@ -6,9 +6,9 @@
 -->
 
 **Snapshot version:** `2026-06-13`
-**Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | content_planner_ai_auto_publish_verified | pool_scheduler_local_needs_user`
+**Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | content_planner_ai_auto_publish_verified | content_planner_ab_page_selection_verified | pool_scheduler_local_needs_user`
 **Production URL:** `https://fbshv-crm.ngchihuy.workers.dev`
-**Latest deploy:** `c1218e9a-8ee4-4153-9ba3-0d167571a668` (Auto planner alias/caption guard fix; production run created 2 scheduled posts, local ImageFlow currently needs user)
+**Latest deploy:** `05a12353-ff75-4172-8c1b-93f0f452e1d7` (Content Planner auto run now uses selected Fanpage IDs; 2 selected pages get different SKU/caption for A/B page testing)
 **Cloudflare account:** `3d1e8c3bd1f4f9ace7388e60dd11fbed` ← KHÔNG ĐỔI
 **Worker name:** `fbshv-crm`
 **D1:** `fbshv_crm_db` · `218d0eab-7734-4fda-91b9-e3e2604e6c86`
@@ -29,7 +29,7 @@
 | Product Sync từ Web TMĐT | ✅ PRODUCTION | Search SKU/name, persists F5 |
 | Orders CRM | ✅ PRODUCTION | Qua ecommerce provider, không tự trừ tồn |
 | Page Audit | ✅ PRODUCTION | Scores: 90 / 86 / 90 |
-| Content Planner | ✅ PRODUCTION · AI ACTIONS + AUTO PUBLISH VERIFIED | Một màn hình cho sản phẩm, AI soạn bài, tạo ảnh AI qua Pool Scheduler, lịch đăng, tự động 4 bài/ngày, lộ trình Fanpage 30 ngày; xoá từng bài hoặc dọn trống chỉ tác động CRM |
+| Content Planner | ✅ PRODUCTION · AI ACTIONS + AUTO PUBLISH + A/B PAGE SELECTION VERIFIED | Một màn hình cho sản phẩm, AI soạn bài, tạo ảnh AI qua Pool Scheduler, lịch đăng, tự động 4 bài/ngày theo đúng Fanpage người dùng chọn; nếu chọn 2 page thì chia SKU/caption khác nhau để test A/B page nào kéo view tốt hơn |
 | AI Settings (Gemini 1-5) | ✅ PRODUCTION | Key 1,2 valid · Key 3 permission_denied |
 | AI Assistant | ✅ PRODUCTION | Gemini real, fallback template khi key lỗi |
 | Facebook Ads (3 accounts) | ✅ PRODUCTION · live-write PAUSED | Không tự ACTIVE • UI workspace light/beige refresh local verified 2026-06-11 |
@@ -249,6 +249,17 @@ FBSHV-CRM/
 - Production job `dda79dcf-3c35-4655-8780-e9dabb99df4b` moved `queued -> running`, proving the new bridge claimed the CRM job and reached Pool Scheduler.
 - ImageFlow then returned `Khong tao duoc current_multi_prompt_batch.json`; job correctly ended `needs_user` with zero assets. This is after the CRM bridge handoff and remains an ImageFlow-local blocker.
 
+### 2026-06-13 - Content Planner selected-page A/B run
+
+- Content automation no longer uses only the old hard-coded page matching when the operator selects Fanpages in the UI.
+- `ContentAutomationPanel` sends selected `pageIds` into `/api/content/automation/run`; `/api/content/auto-daily` also accepts `pageIds`.
+- `runDailyFacebookContentAutomation` filters connected pages by selected page id/external id before building slots.
+- When the operator selects 2 pages, daily slots are assigned round-robin across those selected pages, and the existing `usedSkus` guard keeps created posts on different SKUs/captions for A/B page testing.
+- Mock ecommerce provider now preserves multiple Product Core image URLs so safe auto-content tests exercise the same "only post when enough images exist" rule.
+- Deploy `05a12353-ff75-4172-8c1b-93f0f452e1d7` passed Cloudflare account gate `3d1e8c3bd1f4f9ace7388e60dd11fbed`.
+- Verification before deploy: `npm run lint`, `npm run typecheck`, `npm test` 82/82 pass, `npm run size:check`, `npm run hygiene:check`, `npm run build`.
+- Production browser verification passed: `/content-planner` desktop/tablet/mobile show selected Fanpage target with no horizontal overflow; selecting only `Shop Huy Vân` updates panel to `Fanpage áp dụng: Shop Huy Vân`.
+
 ### 2026-06-13 - Auto planner alias/caption guard production run
 
 - Deploy `c1218e9a-8ee4-4153-9ba3-0d167571a668` sua dung scope CRM: `Shop Gia Dung Huy Van` duoc map vao slot cu `Kho Gia Dung Huy Van`, va caption AI bi cat giua cau se tu roi ve caption an toan.
@@ -363,6 +374,7 @@ FBSHV-CRM/
 
 | Version | Ngày | Nội dung chính |
 |---|---|---|
+| `05a12353` | 2026-06-13 | Content Planner auto run dùng đúng Fanpage người dùng chọn; 2 page được chia SKU/caption khác nhau để test A/B page kéo view |
 | `no-deploy` | 2026-06-13 | Rebuild CRM-owned ImageFlow bridge supervisor + Windows Startup shortcut; restart/claim production verified |
 | `c1218e9a` | 2026-06-13 | Auto planner map dung page `Shop Gia Dung Huy Van`, chan caption AI bi cut giua cau; production run tao 2 bai scheduled + 2 image jobs, local ImageFlow dang `needs_user` |
 | `5e3dbc67` | 2026-06-13 | Content Planner một màn hình: AI soạn bài, tạo ảnh AI qua Pool Scheduler, panel tự động đăng 4 bài/ngày, lộ trình Fanpage; bật `AUTO_PUBLISH_POSTS_ENABLED=true`, production desktop/tablet/mobile pass |

@@ -561,6 +561,7 @@ export function ContentPlannerContent() {
             <div className="space-y-3">
               <ContentAutomationPanel
                 pages={pages}
+                selectedPageIds={selectedPageIds}
                 settings={publishSettings}
                 onFinished={(message) => loadPlanner(message)}
               />

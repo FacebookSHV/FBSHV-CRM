@@ -16,7 +16,7 @@ async function requireAutomationToken(request: Request, dryRun: boolean) {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as { date?: string; limit?: number; dryRun?: boolean };
+  const body = (await request.json().catch(() => ({}))) as { date?: string; limit?: number; dryRun?: boolean; pageIds?: string[] };
   const dryRun = body.dryRun === true;
   const authError = await requireAutomationToken(request, dryRun);
   if (authError) return fail(authError, 401, authError);
@@ -26,6 +26,7 @@ export async function POST(request: Request) {
       await runDailyFacebookContentAutomation({
         date: body.date,
         limit: body.limit,
+        pageIds: Array.isArray(body.pageIds) ? body.pageIds : undefined,
         dryRun
       })
     );

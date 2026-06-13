@@ -12,6 +12,7 @@ type AutomationRunResult = {
 
 type ContentAutomationPanelProps = {
   pages: FacebookPage[];
+  selectedPageIds: string[];
   settings: PublishSettings;
   onFinished: (message: string) => Promise<void> | void;
 };
@@ -30,15 +31,22 @@ const roadmap = [
   { week: "Tuần 4", title: "Tối ưu bán hàng", detail: "Giữ chủ đề hiệu quả, giảm nội dung ít phản hồi và tăng CTA rõ." }
 ];
 
-export function ContentAutomationPanel({ pages, settings, onFinished }: ContentAutomationPanelProps) {
+export function ContentAutomationPanel({ pages, selectedPageIds, settings, onFinished }: ContentAutomationPanelProps) {
   const [running, setRunning] = useState(false);
   const live = settings.autoPublishEnabled;
   const ready = Boolean(settings.automationConfigured && settings.operatorRunEnabled);
+  const selectedPages = pages.filter((page) => selectedPageIds.includes(page.id));
+  const targetPageIds = selectedPages.map((page) => page.id);
+  const targetPageLabel = selectedPages.length === 1 ? selectedPages[0]?.name : `${selectedPages.length} Fanpage đã chọn`;
 
   async function runToday() {
+    if (targetPageIds.length === 0) {
+      await onFinished("Chọn ít nhất một Fanpage trước khi tự động lên lịch.");
+      return;
+    }
     const message = live
-      ? "AI sẽ tạo nội dung, xếp tạo ảnh và lên lịch 4 bài. Khi ảnh sẵn sàng, bài sẽ tự đăng đúng giờ. Tiếp tục?"
-      : "AI sẽ tạo nội dung, xếp tạo ảnh và lên lịch 4 bài trong CRM. Chế độ đăng thật đang tắt nên chưa có bài nào được gửi lên Facebook. Tiếp tục?";
+      ? `AI sẽ tạo nội dung, xếp tạo ảnh và lên lịch 4 bài cho ${targetPageLabel}. Mỗi page sẽ nhận nội dung/SKU khác nhau để test hiệu quả. Tiếp tục?`
+      : `AI sẽ tạo nội dung, xếp tạo ảnh và lên lịch 4 bài cho ${targetPageLabel} trong CRM. Chế độ đăng thật đang tắt nên chưa có bài nào được gửi lên Facebook. Tiếp tục?`;
     if (!window.confirm(message)) return;
 
     setRunning(true);
@@ -46,7 +54,7 @@ export function ContentAutomationPanel({ pages, settings, onFinished }: ContentA
       const response = await fetch("/api/content/automation/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ confirmation: "CREATE_TODAY_SCHEDULE" })
+        body: JSON.stringify({ confirmation: "CREATE_TODAY_SCHEDULE", pageIds: targetPageIds })
       });
       const payload = (await response.json()) as { success: boolean; data?: AutomationRunResult; error?: string };
       if (!response.ok || !payload.success || !payload.data) {
@@ -69,7 +77,7 @@ export function ContentAutomationPanel({ pages, settings, onFinished }: ContentA
             <Bot className="h-4 w-4 text-blue-600" aria-hidden="true" />
             Tự động đăng bài
           </div>
-          <p className="mt-1 text-xs leading-5 text-stone-500">Mỗi ngày AI chuẩn bị 4 bài cho các Fanpage đã kết nối.</p>
+          <p className="mt-1 text-xs leading-5 text-stone-500">Mỗi ngày AI chuẩn bị 4 bài cho đúng Fanpage bạn đang chọn.</p>
         </div>
         <span
           className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -85,6 +93,9 @@ export function ContentAutomationPanel({ pages, settings, onFinished }: ContentA
           <ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" />
           Chỉ đăng khi ảnh đã sẵn sàng
         </div>
+        <div className="mt-2 rounded-xl bg-white px-2.5 py-2 text-xs leading-5 text-stone-600">
+          Fanpage áp dụng: <span className="font-semibold text-stone-900">{targetPageIds.length ? targetPageLabel : "Chưa chọn Fanpage"}</span>
+        </div>
         <div className="mt-2 grid grid-cols-2 gap-2">
           {dailySlots.map((slot) => (
             <div key={slot.time} className="rounded-xl bg-white px-2.5 py-2">
@@ -98,7 +109,7 @@ export function ContentAutomationPanel({ pages, settings, onFinished }: ContentA
       <button
         type="button"
         onClick={() => void runToday()}
-        disabled={!ready || running || pages.length === 0}
+        disabled={!ready || running || targetPageIds.length === 0}
         className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-stone-300"
       >
         {running ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CalendarClock className="h-4 w-4" aria-hidden="true" />}

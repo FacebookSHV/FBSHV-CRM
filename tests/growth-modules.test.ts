@@ -21,7 +21,7 @@ import { getBusinessSdkStatus } from "@/lib/facebook/business-sdk";
 import { getMemoryFacebookStoreForTests } from "@/lib/facebook/store";
 import { getConversionsStatus, sendMetaConversionEvent } from "@/lib/meta/conversions";
 import { runPageAudit, resetPageAuditMemoryForTests } from "@/lib/page-audit";
-import { pageMatchesTarget, selectAutoCaption } from "@/lib/content-auto-planner";
+import { pageMatchesTarget, runDailyFacebookContentAutomation, selectAutoCaption } from "@/lib/content-auto-planner";
 
 describe("growth modules", () => {
   beforeEach(async () => {
@@ -74,6 +74,59 @@ describe("growth modules", () => {
     const complete = `${"Giới thiệu sản phẩm thật và lợi ích rõ ràng. ".repeat(4)}Nhắn tin cho shop.`;
     expect(selectAutoCaption("Nội dung đang viết dở và kết thúc bằng chữ Shop", fallback)).toBe(fallback);
     expect(selectAutoCaption(complete, fallback)).toBe(complete);
+  });
+
+  it("auto planner chạy đúng Fanpage người dùng chọn thay vì page hard-code", async () => {
+    await getMemoryFacebookStoreForTests().upsertPage({
+      id: "page_not_selected",
+      workspaceId: "workspace-demo",
+      externalPageId: "page_not_selected",
+      name: "Shop Gia Dụng Huy Vân",
+      status: "connected",
+      tokenStatus: "valid",
+      subscribedWebhook: true,
+      pictureUrl: "https://example.com/page-2.jpg",
+      syncedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const result = await runDailyFacebookContentAutomation({
+      date: "2099-06-14",
+      dryRun: true,
+      pageIds: ["page_test_growth"]
+    });
+
+    expect(result.pages.map((page) => page.id)).toEqual(["page_test_growth"]);
+    expect(result.created.length).toBeGreaterThan(0);
+    expect(result.created.every((item) => item.post.pageId === "page_test_growth")).toBe(true);
+  });
+
+  it("auto planner splits 2 selected pages into different A/B content", async () => {
+    await getMemoryFacebookStoreForTests().upsertPage({
+      id: "page_test_ab",
+      workspaceId: "workspace-demo",
+      externalPageId: "page_test_ab",
+      name: "Shop Huy Van",
+      status: "connected",
+      tokenStatus: "valid",
+      subscribedWebhook: true,
+      pictureUrl: "https://example.com/page-ab.jpg",
+      syncedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const result = await runDailyFacebookContentAutomation({
+      date: "2099-06-14",
+      dryRun: true,
+      pageIds: ["page_test_growth", "page_test_ab"]
+    });
+
+    expect(new Set(result.pages.map((page) => page.id))).toEqual(new Set(["page_test_growth", "page_test_ab"]));
+    expect(new Set(result.created.map((item) => item.post.pageId))).toEqual(new Set(["page_test_growth", "page_test_ab"]));
+    expect(new Set(result.created.map((item) => item.productSku)).size).toBe(result.created.length);
+    expect(new Set(result.created.map((item) => item.post.caption)).size).toBeGreaterThan(1);
   });
 
   it("scheduled post idempotency cập nhật cùng bài thay vì tạo trùng", async () => {

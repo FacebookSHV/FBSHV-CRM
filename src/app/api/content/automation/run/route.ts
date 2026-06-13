@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     confirmation?: string;
     date?: string;
     limit?: number;
+    pageIds?: string[];
   };
   if (body.confirmation !== CONFIRMATION) {
     return fail("Cần xác nhận trước khi tạo lịch tự động.", 400, "CONTENT_AUTOMATION_CONFIRMATION_REQUIRED");
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
       await runDailyFacebookContentAutomation({
         date: body.date,
         limit: body.limit,
+        pageIds: Array.isArray(body.pageIds) ? body.pageIds : undefined,
         dryRun: false
       })
     );

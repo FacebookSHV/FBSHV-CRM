@@ -57,7 +57,7 @@ describe("Content Planner operator automation", () => {
           origin: "https://fbshv-crm.ngchihuy.workers.dev",
           "sec-fetch-site": "same-origin"
         },
-        body: JSON.stringify({ confirmation: "CREATE_TODAY_SCHEDULE", date: "2026-06-13" })
+        body: JSON.stringify({ confirmation: "CREATE_TODAY_SCHEDULE", date: "2026-06-13", pageIds: ["page_shop_huy_van"] })
       })
     );
 
@@ -65,7 +65,8 @@ describe("Content Planner operator automation", () => {
     expect(runDailyFacebookContentAutomation).toHaveBeenCalledWith({
       date: "2026-06-13",
       limit: undefined,
-      dryRun: false
+      dryRun: false,
+      pageIds: ["page_shop_huy_van"]
     });
   });
 

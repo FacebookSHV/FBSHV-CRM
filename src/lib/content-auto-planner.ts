@@ -177,8 +177,10 @@ async function loadProducts(limit: number) {
   return external.success ? external.data : [];
 }
 
-async function targetPages() {
+async function targetPages(pageIds: string[] = []) {
   const pages = (await (await getFacebookStore()).listPages()).filter((page) => page.tokenStatus === "valid" || page.status === "connected");
+  const selectedIds = new Set(pageIds.map((id) => id.trim()).filter(Boolean));
+  if (selectedIds.size > 0) return pages.filter((page) => selectedIds.has(page.id) || selectedIds.has(page.externalPageId));
   const selected: FacebookPageRecord[] = [];
   for (const name of TARGET_PAGE_NAMES) {
     const match = pages.find((page) => pageMatchesTarget(page.name, name));
@@ -187,7 +189,13 @@ async function targetPages() {
   return selected.length > 0 ? selected : pages.slice(0, 2);
 }
 
-function buildSlots(pages: FacebookPageRecord[]) {
+function buildSlots(pages: FacebookPageRecord[], userSelectedPages = false) {
+  if (userSelectedPages) {
+    return DAILY_SLOTS.flatMap((slot, index) => {
+      const page = pages[index % pages.length];
+      return page ? [{ ...slot, pageId: page.id, pageName: page.name }] : [];
+    });
+  }
   const matched = DAILY_SLOTS.flatMap((slot) => {
     const page = pages.find((item) => pageMatchesTarget(item.name, slot.pageName));
     return page ? [{ ...slot, pageId: page.id, pageName: page.name }] : [];
@@ -199,11 +207,12 @@ function buildSlots(pages: FacebookPageRecord[]) {
   });
 }
 
-export async function runDailyFacebookContentAutomation(input: { date?: string; limit?: number; dryRun?: boolean } = {}): Promise<AutoContentRunResult> {
+export async function runDailyFacebookContentAutomation(input: { date?: string; limit?: number; dryRun?: boolean; pageIds?: string[] } = {}): Promise<AutoContentRunResult> {
   const date = input.date || todayBangkok();
   const now = new Date().toISOString();
-  const pages = await targetPages();
-  const slots = buildSlots(pages);
+  const selectedPageIds = Array.isArray(input.pageIds) ? input.pageIds.filter(Boolean) : [];
+  const pages = await targetPages(selectedPageIds);
+  const slots = buildSlots(pages, selectedPageIds.length > 0);
   const existingPosts = await listContentPosts();
   const products = await loadProducts(input.limit ?? 80);
   const candidates = products
