@@ -6,9 +6,9 @@
 -->
 
 **Snapshot version:** `2026-06-13`
-**Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | content_planner_ai_auto_publish_verified | content_planner_ab_page_selection_verified | pool_scheduler_local_needs_user`
+**Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | content_planner_ai_only_auto_publish_verified | content_planner_ab_page_selection_verified | pool_scheduler_local_needs_user`
 **Production URL:** `https://fbshv-crm.ngchihuy.workers.dev`
-**Latest deploy:** `05a12353-ff75-4172-8c1b-93f0f452e1d7` (Content Planner auto run now uses selected Fanpage IDs; 2 selected pages get different SKU/caption for A/B page testing)
+**Latest deploy:** `ac3fc1c7-539a-4291-a290-28821ff50c4a` (Auto planner creates posts only from valid AI caption; no template caption fallback)
 **Cloudflare account:** `3d1e8c3bd1f4f9ace7388e60dd11fbed` ← KHÔNG ĐỔI
 **Worker name:** `fbshv-crm`
 **D1:** `fbshv_crm_db` · `218d0eab-7734-4fda-91b9-e3e2604e6c86`
@@ -29,7 +29,7 @@
 | Product Sync từ Web TMĐT | ✅ PRODUCTION | Search SKU/name, persists F5 |
 | Orders CRM | ✅ PRODUCTION | Qua ecommerce provider, không tự trừ tồn |
 | Page Audit | ✅ PRODUCTION | Scores: 90 / 86 / 90 |
-| Content Planner | ✅ PRODUCTION · AI ACTIONS + AUTO PUBLISH + A/B PAGE SELECTION VERIFIED | Một màn hình cho sản phẩm, AI soạn bài, tạo ảnh AI qua Pool Scheduler, lịch đăng, tự động 4 bài/ngày theo đúng Fanpage người dùng chọn; nếu chọn 2 page thì chia SKU/caption khác nhau để test A/B page nào kéo view tốt hơn |
+| Content Planner | ✅ PRODUCTION · AI-ONLY AUTO PUBLISH + A/B PAGE SELECTION VERIFIED | Một màn hình cho sản phẩm, AI soạn bài, tạo ảnh AI qua Pool Scheduler, lịch đăng, tự động 4 bài/ngày theo đúng Fanpage người dùng chọn; không dùng caption mẫu trong auto planner |
 | AI Settings (Gemini 1-5) | ✅ PRODUCTION | Key 1,2 valid · Key 3 permission_denied |
 | AI Assistant | ✅ PRODUCTION | Gemini real, fallback template khi key lỗi |
 | Facebook Ads (3 accounts) | ✅ PRODUCTION · live-write PAUSED | Không tự ACTIVE • UI workspace light/beige refresh local verified 2026-06-11 |
@@ -374,6 +374,7 @@ FBSHV-CRM/
 
 | Version | Ngày | Nội dung chính |
 |---|---|---|
+| `ac3fc1c7` | 2026-06-13 | Auto planner chỉ tạo bài khi AI trả caption hợp lệ; AI lỗi/cụt thì giữ slot, không dùng caption mẫu |
 | `05a12353` | 2026-06-13 | Content Planner auto run dùng đúng Fanpage người dùng chọn; 2 page được chia SKU/caption khác nhau để test A/B page kéo view |
 | `no-deploy` | 2026-06-13 | Rebuild CRM-owned ImageFlow bridge supervisor + Windows Startup shortcut; restart/claim production verified |
 | `c1218e9a` | 2026-06-13 | Auto planner map dung page `Shop Gia Dung Huy Van`, chan caption AI bi cut giua cau; production run tao 2 bai scheduled + 2 image jobs, local ImageFlow dang `needs_user` |
@@ -396,7 +397,6 @@ FBSHV-CRM/
 | `no-deploy` | 2026-06-09 | Consolidate snapshot protocol; old status docs moved to `docs/archive/` |
 | `4c84f434` | 2026-06-06 | AI template catalog, landing page TikTok/Shopee/Facebook |
 | `ca8f4da9` | 2026-06-06 | Stricter source-photo render guard |
-| `c8b1b502` | 2026-06-07 | Facebook Ads ImageFlow lane fix, claim sanitizer |
 
 ---
 

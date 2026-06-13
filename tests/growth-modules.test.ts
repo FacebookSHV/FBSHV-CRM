@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as createAdDraftRoute } from "@/app/api/ads/accounts/[accountId]/drafts/route";
 import { GET as listContentPostsRoute } from "@/app/api/content/posts/route";
 import { GET as listFacebookPages } from "@/app/api/facebook/pages/route";
@@ -9,6 +9,7 @@ import {
   scheduleContentPost
 } from "@/lib/content-planner";
 import { generateAiText } from "@/lib/ai/provider";
+import * as aiProvider from "@/lib/ai/provider";
 import {
   createPublishJobs,
   isAutoPublishPostsEnabled,
@@ -23,8 +24,18 @@ import { getConversionsStatus, sendMetaConversionEvent } from "@/lib/meta/conver
 import { runPageAudit, resetPageAuditMemoryForTests } from "@/lib/page-audit";
 import { pageMatchesTarget, runDailyFacebookContentAutomation, selectAutoCaption } from "@/lib/content-auto-planner";
 
+function mockAiCaption(text = `${"AI tạo nội dung bán hàng thật dựa trên Product Core, nhấn mạnh đúng SKU, giá và tồn kho. ".repeat(3)}Nhắn tin cho shop để được tư vấn đúng mẫu.`) {
+  vi.spyOn(aiProvider, "generateAiText").mockResolvedValue({
+    mode: "ai",
+    provider: "gemini",
+    text,
+    notice: "AI thật: gemini"
+  });
+}
+
 describe("growth modules", () => {
   beforeEach(async () => {
+    vi.restoreAllMocks();
     process.env.MOCK_ECOMMERCE_API = "true";
     process.env.MOCK_EXTERNAL_APIS = "true";
     process.env.AUTO_PUBLISH_POSTS_ENABLED = "false";
@@ -69,14 +80,14 @@ describe("growth modules", () => {
     expect(pageMatchesTarget("Hủ Tíu Mì Hủ Hủ Mì", "Kho Gia Dụng Huy Vân")).toBe(false);
   });
 
-  it("auto planner dùng caption an toàn khi AI bị cắt giữa câu", () => {
-    const fallback = "Nội dung an toàn. Nhắn tin cho shop.";
+  it("auto planner giữ slot lại khi AI bị cắt giữa câu, không dùng caption mẫu", () => {
     const complete = `${"Giới thiệu sản phẩm thật và lợi ích rõ ràng. ".repeat(4)}Nhắn tin cho shop.`;
-    expect(selectAutoCaption("Nội dung đang viết dở và kết thúc bằng chữ Shop", fallback)).toBe(fallback);
-    expect(selectAutoCaption(complete, fallback)).toBe(complete);
+    expect(selectAutoCaption("Nội dung đang viết dở và kết thúc bằng chữ Shop")).toBeNull();
+    expect(selectAutoCaption(complete)).toBe(complete);
   });
 
   it("auto planner chạy đúng Fanpage người dùng chọn thay vì page hard-code", async () => {
+    mockAiCaption();
     await getMemoryFacebookStoreForTests().upsertPage({
       id: "page_not_selected",
       workspaceId: "workspace-demo",
@@ -103,6 +114,12 @@ describe("growth modules", () => {
   });
 
   it("auto planner splits 2 selected pages into different A/B content", async () => {
+    vi.spyOn(aiProvider, "generateAiText").mockImplementation(async ({ product }) => ({
+      mode: "ai",
+      provider: "gemini",
+      text: `${"AI viết nội dung riêng cho từng sản phẩm dựa trên Product Core. ".repeat(3)}SKU ${product?.sku ?? "unknown"} còn hàng, nhắn tin cho shop để được tư vấn đúng mẫu.`,
+      notice: "AI thật: gemini"
+    }));
     await getMemoryFacebookStoreForTests().upsertPage({
       id: "page_test_ab",
       workspaceId: "workspace-demo",

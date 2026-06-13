@@ -29,7 +29,7 @@ export type AutoContentRunResult = {
     scheduledAt: string;
     imageflowJobId?: string;
     safety: AutoContentMode;
-    aiMode: "ai" | "template";
+    aiMode: "ai";
   }>;
   held: Array<{ productSku?: string; pageName?: string; reason: string; safety: AutoContentMode }>;
   publishDue: Awaited<ReturnType<typeof publishDueContentJobs>>;
@@ -62,11 +62,11 @@ export function pageMatchesTarget(pageName: string, targetName: string) {
   return aliases.some((alias) => normalizedPage.includes(normalizeText(alias)));
 }
 
-export function selectAutoCaption(aiText: string | null | undefined, fallback: string) {
+export function selectAutoCaption(aiText: string | null | undefined) {
   const text = aiText?.trim() || "";
   const hasCompleteEnding = /[.!?…]$/.test(text);
   const hasCallToAction = /(nhắn tin|inbox|bình luận|mua ngay|liên hệ)/i.test(text);
-  return text.length >= 120 && hasCompleteEnding && hasCallToAction ? text : fallback;
+  return text.length >= 120 && hasCompleteEnding && hasCallToAction ? text : null;
 }
 
 function todayBangkok() {
@@ -108,21 +108,6 @@ function assessSafety(product: ProductWithInventory): { mode: AutoContentMode; r
   if (product.availableStock <= product.lowStockThreshold) return { mode: "hold_for_review", reason: "Tồn thấp, không tự đăng dày" };
   if (!product.description && !(product.promptAssets?.promptText)) return { mode: "hold_for_review", reason: "Thiếu mô tả/promptAssets sản phẩm" };
   return { mode: "auto_safe", reason: "Đủ tồn, đủ ảnh và đủ ngữ cảnh sản phẩm" };
-}
-
-function captionFallback(product: ProductWithInventory, slot: PlannedSlot) {
-  const price = currency(product.currentPrice, product.currency);
-  const stockLine = product.availableStock > 0 ? `Hàng đang có trong kho, shop kiểm đúng SKU ${product.sku} trước khi chốt.` : "";
-  if (slot.template === "problem_solution") {
-    return `Bạn đang cần chọn đúng món gia dụng cho nhu cầu hằng ngày?\n\n${product.name} là lựa chọn đáng cân nhắc khi cần hàng có sẵn, rõ SKU và được tư vấn trước khi mua.\n\nGiá tham khảo: ${price}\n${stockLine}\n\nNhắn Shop Huy Vân để shop kiểm mẫu, số lượng và phương án dùng phù hợp.`;
-  }
-  if (slot.template === "comparison") {
-    return `Đừng chọn theo cảm tính nếu chưa kiểm đúng nhu cầu.\n\nVới ${product.name}, shop sẽ kiểm SKU ${product.sku}, tồn kho và thông tin sản phẩm trước khi tư vấn.\n\nGiá tham khảo: ${price}\n${stockLine}\n\nInbox để được gợi ý đúng loại, tránh mua nhầm.`;
-  }
-  if (slot.template === "promotion") {
-    return `${product.name}\n\nGiá hôm nay: ${price}\n${stockLine}\n\nSản phẩm được lấy từ dữ liệu đồng bộ thật của shop. Nhắn tin để kiểm tồn và ưu đãi hiện tại trước khi chốt đơn.`;
-  }
-  return `${product.name}\n\nSKU: ${product.sku}\nGiá tham khảo: ${price}\n${stockLine}\n\nKho Gia Dụng Huy Vân ưu tiên hàng có sẵn, kiểm mẫu trước khi báo khách.`;
 }
 
 function buildPrompt(product: ProductWithInventory, slot: PlannedSlot) {
@@ -247,9 +232,16 @@ export async function runDailyFacebookContentAutomation(input: { date?: string; 
     }
 
     const ai = await generateAiText({ task: "caption", product: selected.product, prompt: buildPrompt(selected.product, slot) });
-    const fallbackCaption = captionFallback(selected.product, slot);
-    const caption = selectAutoCaption(ai.text, fallbackCaption);
-    const aiMode = caption === ai.text?.trim() ? ai.mode : "template";
+    const caption = ai.mode === "ai" ? selectAutoCaption(ai.text) : null;
+    if (!caption) {
+      held.push({
+        productSku: selected.product.sku,
+        pageName: slot.pageName,
+        reason: ai.mode === "ai" ? "AI_CAPTION_INCOMPLETE_OR_UNSAFE" : ai.needUser || "AI_CAPTION_REQUIRED",
+        safety: "hold_for_review"
+      });
+      continue;
+    }
     const post = await createContentPost({
       pageId: slot.pageId,
       productSku: selected.product.sku,
@@ -293,7 +285,7 @@ export async function runDailyFacebookContentAutomation(input: { date?: string; 
       scheduledAt,
       imageflowJobId: imageJob?.id,
       safety: safety.mode,
-      aiMode
+      aiMode: "ai"
     });
   }
 
