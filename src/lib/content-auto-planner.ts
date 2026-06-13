@@ -37,6 +37,11 @@ export type AutoContentRunResult = {
 
 const TARGET_PAGE_NAMES = ["Shop Huy Vân", "Kho Gia Dụng Huy Vân"];
 
+const TARGET_PAGE_ALIASES: Record<string, string[]> = {
+  [normalizeText("Shop Huy Vân")]: ["Shop Huy Vân"],
+  [normalizeText("Kho Gia Dụng Huy Vân")]: ["Kho Gia Dụng Huy Vân", "Shop Gia Dụng Huy Vân"]
+};
+
 const DAILY_SLOTS: Array<Omit<PlannedSlot, "pageId" | "pageName"> & { pageName: string }> = [
   { pageName: "Shop Huy Vân", time: "08:10", template: "problem_solution", objective: "Bài nỗi đau và giải pháp để kéo inbox" },
   { pageName: "Shop Huy Vân", time: "19:45", template: "promotion", objective: "Bài bán hàng mạnh nhất trong ngày" },
@@ -49,6 +54,19 @@ function normalizeText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+export function pageMatchesTarget(pageName: string, targetName: string) {
+  const normalizedPage = normalizeText(pageName);
+  const aliases = TARGET_PAGE_ALIASES[normalizeText(targetName)] ?? [targetName];
+  return aliases.some((alias) => normalizedPage.includes(normalizeText(alias)));
+}
+
+export function selectAutoCaption(aiText: string | null | undefined, fallback: string) {
+  const text = aiText?.trim() || "";
+  const hasCompleteEnding = /[.!?…]$/.test(text);
+  const hasCallToAction = /(nhắn tin|inbox|bình luận|mua ngay|liên hệ)/i.test(text);
+  return text.length >= 120 && hasCompleteEnding && hasCallToAction ? text : fallback;
 }
 
 function todayBangkok() {
@@ -163,7 +181,7 @@ async function targetPages() {
   const pages = (await (await getFacebookStore()).listPages()).filter((page) => page.tokenStatus === "valid" || page.status === "connected");
   const selected: FacebookPageRecord[] = [];
   for (const name of TARGET_PAGE_NAMES) {
-    const match = pages.find((page) => normalizeText(page.name).includes(normalizeText(name)));
+    const match = pages.find((page) => pageMatchesTarget(page.name, name));
     if (match) selected.push(match);
   }
   return selected.length > 0 ? selected : pages.slice(0, 2);
@@ -171,7 +189,7 @@ async function targetPages() {
 
 function buildSlots(pages: FacebookPageRecord[]) {
   const matched = DAILY_SLOTS.flatMap((slot) => {
-    const page = pages.find((item) => normalizeText(item.name).includes(normalizeText(slot.pageName)));
+    const page = pages.find((item) => pageMatchesTarget(item.name, slot.pageName));
     return page ? [{ ...slot, pageId: page.id, pageName: page.name }] : [];
   });
   if (matched.length > 0) return matched;
@@ -220,7 +238,9 @@ export async function runDailyFacebookContentAutomation(input: { date?: string; 
     }
 
     const ai = await generateAiText({ task: "caption", product: selected.product, prompt: buildPrompt(selected.product, slot) });
-    const caption = ai.text || captionFallback(selected.product, slot);
+    const fallbackCaption = captionFallback(selected.product, slot);
+    const caption = selectAutoCaption(ai.text, fallbackCaption);
+    const aiMode = caption === ai.text?.trim() ? ai.mode : "template";
     const post = await createContentPost({
       pageId: slot.pageId,
       productSku: selected.product.sku,
@@ -264,7 +284,7 @@ export async function runDailyFacebookContentAutomation(input: { date?: string; 
       scheduledAt,
       imageflowJobId: imageJob?.id,
       safety: safety.mode,
-      aiMode: ai.mode
+      aiMode
     });
   }
 

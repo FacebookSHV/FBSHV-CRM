@@ -21,6 +21,7 @@ import { getBusinessSdkStatus } from "@/lib/facebook/business-sdk";
 import { getMemoryFacebookStoreForTests } from "@/lib/facebook/store";
 import { getConversionsStatus, sendMetaConversionEvent } from "@/lib/meta/conversions";
 import { runPageAudit, resetPageAuditMemoryForTests } from "@/lib/page-audit";
+import { pageMatchesTarget, selectAutoCaption } from "@/lib/content-auto-planner";
 
 describe("growth modules", () => {
   beforeEach(async () => {
@@ -60,6 +61,19 @@ describe("growth modules", () => {
     const suggestions = buildCalendarSuggestions(7);
     expect(suggestions).toHaveLength(7);
     expect(suggestions[0]!.suggestedTemplate).toBe("product_intro");
+  });
+
+  it("auto planner nhận đúng alias Shop Gia Dụng thay cho tên Kho cũ", () => {
+    expect(pageMatchesTarget("Shop Gia Dụng Huy Vân", "Kho Gia Dụng Huy Vân")).toBe(true);
+    expect(pageMatchesTarget("Shop Huy Vân", "Shop Huy Vân")).toBe(true);
+    expect(pageMatchesTarget("Hủ Tíu Mì Hủ Hủ Mì", "Kho Gia Dụng Huy Vân")).toBe(false);
+  });
+
+  it("auto planner dùng caption an toàn khi AI bị cắt giữa câu", () => {
+    const fallback = "Nội dung an toàn. Nhắn tin cho shop.";
+    const complete = `${"Giới thiệu sản phẩm thật và lợi ích rõ ràng. ".repeat(4)}Nhắn tin cho shop.`;
+    expect(selectAutoCaption("Nội dung đang viết dở và kết thúc bằng chữ Shop", fallback)).toBe(fallback);
+    expect(selectAutoCaption(complete, fallback)).toBe(complete);
   });
 
   it("scheduled post idempotency cập nhật cùng bài thay vì tạo trùng", async () => {

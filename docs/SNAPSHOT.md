@@ -6,9 +6,9 @@
 -->
 
 **Snapshot version:** `2026-06-13`
-**Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | content_planner_ai_auto_publish_verified`
+**Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | content_planner_ai_auto_publish_verified | pool_scheduler_local_needs_user`
 **Production URL:** `https://fbshv-crm.ngchihuy.workers.dev`
-**Latest deploy:** `5e3dbc67-9686-4eb3-bd52-8e70c914a757` (Content Planner one-screen AI actions + auto publish UI verified 2026-06-13)
+**Latest deploy:** `c1218e9a-8ee4-4153-9ba3-0d167571a668` (Auto planner alias/caption guard fix; production run created 2 scheduled posts, local ImageFlow currently needs user)
 **Cloudflare account:** `3d1e8c3bd1f4f9ace7388e60dd11fbed` ← KHÔNG ĐỔI
 **Worker name:** `fbshv-crm`
 **D1:** `fbshv_crm_db` · `218d0eab-7734-4fda-91b9-e3e2604e6c86`
@@ -239,6 +239,17 @@ FBSHV-CRM/
 
 ---
 
+### 2026-06-13 - Auto planner alias/caption guard production run
+
+- Deploy `c1218e9a-8ee4-4153-9ba3-0d167571a668` sua dung scope CRM: `Shop Gia Dung Huy Van` duoc map vao slot cu `Kho Gia Dung Huy Van`, va caption AI bi cat giua cau se tu roi ve caption an toan.
+- Production automation run ngay `2026-06-13` da tao 2 bai lich toi:
+  - `99bf6840-c041-4bae-b26d-7959e285bff3` cho `Shop Huy Van`, SKU `162114_COMBO_2_LO_YUHAO_268G`, lich `2026-06-13T12:45:00.000Z`, image job `dda79dcf-3c35-4655-8780-e9dabb99df4b`.
+  - `cdebc713-0ed7-4881-80c1-4fe2af0ac9e0` cho `Shop Gia Dung Huy Van`, SKU `K238_2VAO2RA`, lich `2026-06-13T13:30:00.000Z`, image job `e21c7c7b-df98-4fc5-bbc0-44717455e746`.
+- Readback `/api/content/posts`: 2 bai o trang thai `scheduled`, caption hoan chinh, khong con bai rac tu luot smoke cu.
+- Bridge watcher CRM da duoc bat lai bang `scripts/imageflow-bridge.mjs --watch`; Pool Scheduler local `http://127.0.0.1:7096` co phan hoi, nhung local ImageFlow tra loi `Khong tao duoc current_multi_prompt_batch.json` va `CDP queue dang chay`.
+- Hai image job dang o `needs_user`; chua co `imageflow_assets`, vi vay publish gate van giu job o lich/cho media va khong dang bai chu khi thieu anh.
+- Verification code sau patch: `npm test` 79/79 pass, `npm run lint`, `npm run typecheck`, `npm run size:check`, `npm run hygiene:check`, `npm run build`.
+
 ### 2026-06-13 — Pool Scheduler CRM-only cleanup
 
 - Chỉ sửa CRM, không chỉnh ImageFlow local source.
@@ -266,48 +277,9 @@ FBSHV-CRM/
 - D1 readback: `content_posts`, `content_post_targets`, `content_publish_jobs`, `content_publish_logs`, `content_media`, ImageFlow jobs/assets gắn post đều bằng 0.
 - Browser production pass mobile `390x844`, tablet `820x1180`, desktop `1366x900`; không tràn ngang, empty state đúng, nút bulk disabled khi count = 0.
 
-### 2026-06-11 — Planner/ImageFlow UI local update
+### 2026-06-11 — Archived local bridge/UI notes
 
-- `Content Planner` local đã gom flow `sản phẩm → ảnh AI → nội dung → lịch` vào một màn.
-- Thêm `AI image picker` inline để tạo job mới hoặc chọn ảnh đã duyệt mà không phải sang màn bridge.
-- `ImageFlow Bridge` local đã đổi sang queue/admin view; bỏ form tạo job khỏi bridge.
-- Ảnh đã duyệt trong bridge có deep link quay về `/content-planner` để dùng ngay cho bài đăng.
-- Trạng thái hiện tại: `local verified, no deploy yet`; vẫn cần mở production thật và kiểm mobile/tablet/desktop trước khi chốt DONE.
-
-### 2026-06-11 — ImageFlow bridge data reset
-
-- Đã xoá sạch dữ liệu cầu nối ảnh trên production D1: `imageflow_jobs=0`, `imageflow_assets=0`, `content_media_linked=0`.
-- Đã dọn local staging tại `D:\codex_manager_v3.1\tools\imageflow\work\crm_bridge` để bridge kéo batch mới từ đầu.
-- Verify production API `https://fbshv-crm.ngchihuy.workers.dev/api/imageflow/jobs?limit=5` trả `{"success":true,"data":{"jobs":[]}}`.
-- Không deploy code trong lượt này.
-
-### 2026-06-11 — ImageFlow bridge flow resumed
-
-- Root cause runtime: không có process `scripts/imageflow-bridge.mjs --watch`, trong khi local ImageFlow queue còn 1 item stale `prompting` (`SP_13415381673`) làm adapter báo `queue is busy`.
-- Đã gỡ stale queue item local qua `POST http://127.0.0.1:7096/api/product-queue/remove`.
-- Đã requeue đúng job CRM `272614c3-3887-4805-8032-f82b3abf9b14`, clear lock remote, rồi chạy bridge lại.
-- Verify thật: production job đã chuyển `queued → running`; local `http://127.0.0.1:7096/api/status` báo `cdp_queue.running=true`, `queue_active=true`; local queue item `HV999K241300S` đang `rendering`.
-- Đã bật lại watcher nền `scripts/imageflow-bridge.mjs --watch` để job mới không kẹt `queued`.
-- Patch local thêm chẩn đoán stderr cho `scripts/imageflow-bridge.mjs` và sửa requeue clear lock trong `src/lib/imageflow/store.ts`; chưa deploy code trong lượt này vì đã xử lý runtime trực tiếp.
-
-### 2026-06-11 — ImageFlow bridge watcher autostart stabilized
-
-- Đã thêm supervisor launcher `D:\codex_manager_v3.1\tools\imageflow\launchers\run_crm_watcher.ps1` để tự nạp env từ `E:\FBSHV-CRM\.env.local`, chờ local ImageFlow `http://127.0.0.1:7096/api/status` sẵn sàng rồi mới giữ vòng watch.
-- `run_crm_watcher.bat` giờ chỉ gọi supervisor PowerShell; `start_local_imageflow_stack.bat` tự kéo watcher lên cùng local stack nên không cần bật tay nữa.
-- Supervisor dùng mutex + dò process `node ...scripts\imageflow-bridge.mjs --watch` để tránh chạy trùng; log tách riêng: `work/logs/imageflow-bridge-supervisor.log` và `work/logs/imageflow-bridge-watch.log`.
-- Verify thật 2026-06-11 21:38 ICT: startup shortcut `FBSHV CRM ImageFlow Watcher.lnk` vẫn trỏ đúng launcher; process sống ổn định gồm `powershell.exe run_crm_watcher.ps1` và `node.exe .\\scripts\\imageflow-bridge.mjs --watch`.
-
-### 2026-06-11 — ImageFlow profile exclusivity rule noted
-
-- Đã ghi rule cứng vào `E:\FBSHV-CRM\AGENTS.md` và `D:\codex_manager_v3.1\tools\imageflow\AGENTS.md`: một profile/CDP runtime đang chạy thì không được nhét thêm job thứ hai vào cùng profile đó.
-- Nếu profile đang bận thì lane phải chọn profile rảnh khác hoặc chờ profile cũ chạy xong; không chạy chồng nhiều job trên cùng một profile.
-
-### 2026-06-11 — Inbox/Ads UI local update
-
-- `Inbox/Comment` đã đổi sang workspace sáng, gom `hội thoại → trả lời → chốt đơn → bình luận` vào cùng một flow thao tác.
-- `Facebook Ads` đã đổi sang layout vận hành sáng, nhấn mạnh trạng thái, checklist và quyền còn thiếu thay vì card kỹ thuật nặng.
-- Đã verify local bằng Chrome headful + CDP ở `desktop/tablet/mobile`; ảnh nằm trong `work/debug/ui-verify/`.
-- Chưa deploy production trong lượt này.
+- Chi tiết các lượt local-only 2026-06-11 đã được giữ trong git history; snapshot hiện chỉ giữ trạng thái production/current để không vượt giới hạn 30KB.
 
 ### 2026-06-11 — CRM/Automation/Fanpage/Audit UI local update
 
@@ -380,6 +352,7 @@ FBSHV-CRM/
 
 | Version | Ngày | Nội dung chính |
 |---|---|---|
+| `c1218e9a` | 2026-06-13 | Auto planner map dung page `Shop Gia Dung Huy Van`, chan caption AI bi cut giua cau; production run tao 2 bai scheduled + 2 image jobs, local ImageFlow dang `needs_user` |
 | `5e3dbc67` | 2026-06-13 | Content Planner một màn hình: AI soạn bài, tạo ảnh AI qua Pool Scheduler, panel tự động đăng 4 bài/ngày, lộ trình Fanpage; bật `AUTO_PUBLISH_POSTS_ENABLED=true`, production desktop/tablet/mobile pass |
 | `e357c2b5` | 2026-06-13 | Content Planner có xoá từng bài + dọn trống CRM-only; production xoá sạch 31 record, API/D1/UI responsive readback đều pass |
 | `02a04285` | 2026-06-13 | Pool Scheduler CRM-only production verified: Content Planner tự xếp job ảnh theo `postId`, bridge chỉ transport nền, adapter không tự chọn profile; Cloudflare gate pass, UI/API production pass |
