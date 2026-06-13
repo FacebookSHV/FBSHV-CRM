@@ -6,9 +6,9 @@
 -->
 
 **Snapshot version:** `2026-06-13`
-**Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | imageflow_pool_scheduler_production_verified`
+**Trạng thái:** `core_integration_sprint1_production_verified | ecommerce_signed_webhook_readback_pass | commerce_live_write_gated | content_planner_ai_auto_publish_verified`
 **Production URL:** `https://fbshv-crm.ngchihuy.workers.dev`
-**Latest deploy:** `e357c2b5-a7e9-4995-9fe2-0c7b6c4d4a30` (Content Planner CRM-only delete + production cleanup verified 2026-06-13)
+**Latest deploy:** `5e3dbc67-9686-4eb3-bd52-8e70c914a757` (Content Planner one-screen AI actions + auto publish UI verified 2026-06-13)
 **Cloudflare account:** `3d1e8c3bd1f4f9ace7388e60dd11fbed` ← KHÔNG ĐỔI
 **Worker name:** `fbshv-crm`
 **D1:** `fbshv_crm_db` · `218d0eab-7734-4fda-91b9-e3e2604e6c86`
@@ -29,7 +29,7 @@
 | Product Sync từ Web TMĐT | ✅ PRODUCTION | Search SKU/name, persists F5 |
 | Orders CRM | ✅ PRODUCTION | Qua ecommerce provider, không tự trừ tồn |
 | Page Audit | ✅ PRODUCTION | Scores: 90 / 86 / 90 |
-| Content Planner | ✅ PRODUCTION · POOL SCHEDULER + DELETE VERIFIED | Entry duy nhất cho bài viết + ảnh; lưu/lên lịch bài tự xếp ImageFlow job theo `postId`; xoá từng bài hoặc dọn trống chỉ tác động CRM, không gọi Meta |
+| Content Planner | ✅ PRODUCTION · AI ACTIONS + AUTO PUBLISH VERIFIED | Một màn hình cho sản phẩm, AI soạn bài, tạo ảnh AI qua Pool Scheduler, lịch đăng, tự động 4 bài/ngày, lộ trình Fanpage 30 ngày; xoá từng bài hoặc dọn trống chỉ tác động CRM |
 | AI Settings (Gemini 1-5) | ✅ PRODUCTION | Key 1,2 valid · Key 3 permission_denied |
 | AI Assistant | ✅ PRODUCTION | Gemini real, fallback template khi key lỗi |
 | Facebook Ads (3 accounts) | ✅ PRODUCTION · live-write PAUSED | Không tự ACTIVE • UI workspace light/beige refresh local verified 2026-06-11 |
@@ -40,7 +40,7 @@
 | Integration Events/Jobs | ✅ PRODUCTION VERIFIED | Migration `0009` remote applied, atomic claim, cron mỗi phút, recovery/max retry, retry/cancel same-origin, operator UI no overflow mobile/tablet/desktop |
 | Facebook/Web TMĐT Webhooks | ✅ SIGNED WEBHOOK READBACK PASS | Web TMĐT signed `product.updated` event accepted, queued, cron processed `sync_product_to_crm` to `completed` |
 | Facebook Commerce Core | ✅ DEPLOYED · WRITE TEST GATED | Check giá/tồn, reserve, tạo Order Core, chỉ persist local sau external OK; chưa chạy write test vì cần `RUN_EXTERNAL_WRITE_TESTS=true` + SKU test riêng |
-| Auto Publish Posts | 🔧 OFF | `AUTO_PUBLISH_POSTS_ENABLED=false` |
+| Auto Publish Posts | ✅ PRODUCTION ON | `AUTO_PUBLISH_POSTS_ENABLED=true`; publish job chỉ đăng khi ảnh đã sẵn sàng |
 | A/B Landing Variants | 🔧 SCHEMA ONLY | Chưa có traffic split UI |
 | CRM Khách hàng | 📋 PLANNED | — |
 | Ads Intelligence Dashboard | 📋 PLANNED | Cần Meta App Review |
@@ -204,7 +204,8 @@ FBSHV-CRM/
 | `AUTO_REPLY_MESSAGES_ENABLED` | ✅ true |
 | `AUTO_REPLY_COMMENTS_ENABLED` | ✅ true |
 | `AUTO_HIDE_PHONE_COMMENTS_ENABLED` | ✅ true |
-| `AUTO_PUBLISH_POSTS_ENABLED` | ✅ false (chủ động tắt) |
+| `AUTO_PUBLISH_POSTS_ENABLED` | ✅ true |
+| `CONTENT_AUTOMATION_UI_ENABLED` | ✅ true |
 | `IMAGEFLOW_BRIDGE_TOKEN` | ✅ chỉ cho local script |
 | `MOCK_EXTERNAL_APIS` | ✅ false |
 | `MOCK_ECOMMERCE_API` | ✅ false |
@@ -343,7 +344,6 @@ FBSHV-CRM/
 | N1 | Pre-upload claim QA (OCR text trên ảnh render) | `scripts/imageflow-crm-adapter.mjs` |
 | N2 | Improve ImageFlow landing → 5/5 frames approved (hiện 2/5) | Prompt path + thêm ảnh Product Core |
 | N3 | A/B traffic split UI cho landing page variants | `src/lib/landing-pages/store.ts` + UI mới |
-| N4 | Auto publish posts thật | Bật `AUTO_PUBLISH_POSTS_ENABLED=true` sau khi N5 xong |
 | N5 | RUNBOOK.md — xử lý khi production down | Tạo `docs/RUNBOOK.md` |
 | N6 | Doc rotate `ENCRYPTION_KEY` an toàn | Thêm vào `docs/architecture.md` |
 
@@ -359,7 +359,7 @@ FBSHV-CRM/
 ### Phase 4 — Content AI nâng cao (2–3 tuần)
 - **Content calendar visual:** lịch tháng drag-drop, schema đã có
 - **Multi-image album post:** đăng album nhiều ảnh từ ImageFlow assets
-- **Auto publish cron:** sau khi reconnect Facebook xong
+- **Auto publish cron:** production on; tiếp tục bổ sung lịch tháng drag-drop nếu cần
 - **Hashtag AI suggester:** Gemini + product context
 
 ### Phase 5 — Ads Intelligence (3–4 tuần, cần Meta Review)
@@ -380,6 +380,7 @@ FBSHV-CRM/
 
 | Version | Ngày | Nội dung chính |
 |---|---|---|
+| `5e3dbc67` | 2026-06-13 | Content Planner một màn hình: AI soạn bài, tạo ảnh AI qua Pool Scheduler, panel tự động đăng 4 bài/ngày, lộ trình Fanpage; bật `AUTO_PUBLISH_POSTS_ENABLED=true`, production desktop/tablet/mobile pass |
 | `e357c2b5` | 2026-06-13 | Content Planner có xoá từng bài + dọn trống CRM-only; production xoá sạch 31 record, API/D1/UI responsive readback đều pass |
 | `02a04285` | 2026-06-13 | Pool Scheduler CRM-only production verified: Content Planner tự xếp job ảnh theo `postId`, bridge chỉ transport nền, adapter không tự chọn profile; Cloudflare gate pass, UI/API production pass |
 | `no-deploy` | 2026-06-11 | Ghi rule cứng `không chạy chồng nhiều job trên cùng profile` vào CRM/ImageFlow AGENTS + snapshot |

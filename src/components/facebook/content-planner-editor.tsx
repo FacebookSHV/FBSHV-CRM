@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Clock3, ImageUp, Save, Send, Upload } from "lucide-react";
+import { CalendarDays, Clock3, ImageIcon, ImageUp, LoaderCircle, Save, Send, Sparkles, Upload } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { ProductSearchPicker } from "@/components/products/product-search-picker";
@@ -18,6 +18,7 @@ type ContentPlannerEditorProps = {
   manualCaption: string;
   manualCta: string;
   scheduledAt: string;
+  aiAction?: "caption" | "image" | null;
   aiImagePicker?: ReactNode;
   onTitleChange: (value: string) => void;
   onCaptionChange: (value: string) => void;
@@ -26,6 +27,8 @@ type ContentPlannerEditorProps = {
   onProductSelect: (product: ProductWithInventory | null) => void;
   onPageToggle: (pageId: string, checked: boolean) => void;
   onMediaChange: (file: File | null) => void;
+  onComposeAi: () => void;
+  onCreateAiImage: () => void;
   onSave: (mode: "draft" | "schedule" | "publish") => void;
 };
 
@@ -89,6 +92,7 @@ export function ContentPlannerEditor({
   manualCaption,
   manualCta,
   scheduledAt,
+  aiAction,
   aiImagePicker,
   onTitleChange,
   onCaptionChange,
@@ -97,6 +101,8 @@ export function ContentPlannerEditor({
   onProductSelect,
   onPageToggle,
   onMediaChange,
+  onComposeAi,
+  onCreateAiImage,
   onSave
 }: ContentPlannerEditorProps) {
   return (
@@ -112,6 +118,33 @@ export function ContentPlannerEditor({
             ) : (
               "sẽ hiện ngay tại đây sau khi chọn sản phẩm"
             )}
+          </div>
+
+          <div className="mt-3 rounded-[22px] border border-blue-200 bg-blue-50 p-3">
+            <div className="text-sm font-bold text-blue-950">AI hỗ trợ tạo bài</div>
+            <p className="mt-1 text-xs leading-5 text-blue-700">
+              Chọn sản phẩm trước, sau đó để AI viết nội dung và xếp tạo ảnh. Bạn vẫn kiểm tra lại trước khi đặt lịch.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={onComposeAi}
+                disabled={!selectedProductSku || Boolean(aiAction)}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-stone-300"
+              >
+                {aiAction === "caption" ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+                {aiAction === "caption" ? "AI đang soạn..." : "AI soạn bài"}
+              </button>
+              <button
+                type="button"
+                onClick={onCreateAiImage}
+                disabled={!selectedProductSku || Boolean(aiAction)}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-white px-4 text-sm font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400"
+              >
+                {aiAction === "image" ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ImageIcon className="h-4 w-4" aria-hidden="true" />}
+                {aiAction === "image" ? "Đang xếp tạo ảnh..." : "Tạo ảnh AI"}
+              </button>
+            </div>
           </div>
 
           <div className="mt-3">{aiImagePicker}</div>

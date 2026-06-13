@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const createContentPost = vi.fn();
 const deleteContentPost = vi.fn();
 const updateContentPost = vi.fn();
+const listContentPosts = vi.fn();
 const addContentPostTargets = vi.fn();
 const replaceContentPostTargets = vi.fn();
 const ensureImageflowJobForPost = vi.fn();
@@ -13,7 +14,7 @@ vi.mock("@/lib/content-planner", () => ({
   createContentPost,
   deleteContentPost,
   updateContentPost,
-  listContentPosts: vi.fn(async () => [])
+  listContentPosts
 }));
 
 vi.mock("@/lib/content-publishing", () => ({
@@ -40,6 +41,17 @@ describe("Content Planner ImageFlow routing", () => {
     addContentPostTargets.mockResolvedValue(["page_1"]);
     ensureImageflowJobForPost.mockResolvedValue({ id: "job_pool_1", status: "queued" });
     deleteContentPost.mockResolvedValue({ deleted: true });
+    listContentPosts.mockResolvedValue([
+      {
+        id: "post_pool_1",
+        pageId: "page_1",
+        productSku: "SKU_POOL_1",
+        title: "Bài viết dùng Pool Scheduler",
+        caption: "Nội dung",
+        cta: "Nhắn tin",
+        status: "draft"
+      }
+    ]);
   });
 
   it("tự tạo một job ảnh gắn postId khi bài chưa có media", async () => {
@@ -87,6 +99,23 @@ describe("Content Planner ImageFlow routing", () => {
 
     expect(response.status).toBe(200);
     expect(ensureImageflowJobForPost).not.toHaveBeenCalled();
+  });
+
+  it("nút Tạo ảnh AI chỉ xếp lại đúng job Pool Scheduler theo postId", async () => {
+    const { POST } = await import("@/app/api/content/posts/[id]/imageflow/route");
+    const response = await POST(
+      new Request("http://localhost/api/content/posts/post_pool_1/imageflow", { method: "POST" }),
+      { params: Promise.resolve({ id: "post_pool_1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(ensureImageflowJobForPost).toHaveBeenCalledWith(
+      expect.objectContaining({ postId: "post_pool_1", productSku: "SKU_POOL_1" })
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { imageflowJob: { id: "job_pool_1", status: "queued" } }
+    });
   });
 
   it("xoá CRM-only truyền cờ rõ ràng và không gọi Meta", async () => {
@@ -139,5 +168,25 @@ describe("CRM chỉ dùng Pool Scheduler của ImageFlow", () => {
     expect(content).toContain("?scope=crm");
     expect(list).toContain("Dọn trống planner");
     expect(list).toContain("Bài thật trên Facebook hoàn toàn không bị xoá");
+  });
+
+  it("Content Planner hiển thị hành động AI và tự động đăng bằng ngôn ngữ người dùng cuối", async () => {
+    const content = await readFile(
+      path.join(process.cwd(), "src", "components", "facebook", "content-planner-content.tsx"),
+      "utf8"
+    );
+    const editor = await readFile(
+      path.join(process.cwd(), "src", "components", "facebook", "content-planner-editor.tsx"),
+      "utf8"
+    );
+    const automation = await readFile(
+      path.join(process.cwd(), "src", "components", "facebook", "content-automation", "automation-panel.tsx"),
+      "utf8"
+    );
+    expect(editor).toContain("AI soạn bài");
+    expect(editor).toContain("Tạo ảnh AI");
+    expect(automation).toContain("Tự động lên lịch 4 bài hôm nay");
+    expect(automation).not.toContain("cron");
+    expect(content).toContain("Lộ trình phát triển Fanpage");
   });
 });

@@ -183,6 +183,7 @@ function buildSlots(pages: FacebookPageRecord[]) {
 
 export async function runDailyFacebookContentAutomation(input: { date?: string; limit?: number; dryRun?: boolean } = {}): Promise<AutoContentRunResult> {
   const date = input.date || todayBangkok();
+  const now = new Date().toISOString();
   const pages = await targetPages();
   const slots = buildSlots(pages);
   const existingPosts = await listContentPosts();
@@ -198,6 +199,10 @@ export async function runDailyFacebookContentAutomation(input: { date?: string; 
 
   for (const slot of slots) {
     const scheduledAt = bangkokTimeToIso(date, slot.time);
+    if (scheduledAt <= now) {
+      held.push({ pageName: slot.pageName, reason: `Đã qua khung giờ ${slot.time}`, safety: "hold_for_review" });
+      continue;
+    }
     if (existingPosts.some((post) => post.pageId === slot.pageId && post.scheduledAt === scheduledAt)) {
       held.push({ pageName: slot.pageName, reason: `Đã có bài ở slot ${slot.time}`, safety: "hold_for_review" });
       continue;

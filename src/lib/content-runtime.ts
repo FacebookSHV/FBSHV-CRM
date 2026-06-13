@@ -25,3 +25,12 @@ export async function isAutoPublishRuntimeEnabled() {
 export async function getContentAutomationToken() {
   return (await getContentRuntimeEnv()).CONTENT_AUTOMATION_TOKEN?.trim() || "";
 }
+
+export async function getContentAutomationStatus() {
+  const env = await getContentRuntimeEnv();
+  return {
+    autoPublishEnabled: autoPublishEnabled(env),
+    automationConfigured: Boolean(env.CONTENT_AUTOMATION_TOKEN?.trim()),
+    operatorRunEnabled: env.CONTENT_AUTOMATION_UI_ENABLED === "true"
+  };
+}

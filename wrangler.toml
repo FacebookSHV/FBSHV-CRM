@@ -20,3 +20,7 @@ bucket_name = "fbshv-crm-assets"
 [triggers]
 crons = ["*/1 * * * *", "*/10 * * * *", "15 17 * * *"]
 
+[vars]
+CONTENT_AUTOMATION_UI_ENABLED = "true"
+AUTO_PUBLISH_POSTS_ENABLED = "true"
+

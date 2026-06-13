@@ -1,10 +1,12 @@
 "use client";
 
-import { FilePlus2, RefreshCcw, WandSparkles } from "lucide-react";
+import { RefreshCcw, WandSparkles } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { StatusPill } from "@/components/ui/status-pill";
+import { ContentAutomationPanel, GrowthRoadmap } from "./content-automation/automation-panel";
+import { ContentIdeaPanels } from "./content-automation/idea-panels";
 import { ContentPlannerAiImagePicker, type PlannerAiAsset } from "./content-planner-ai-image-picker";
 import { ContentPlannerEditor } from "./content-planner-editor";
 import { ContentPlannerPostList } from "./content-planner-post-list";
@@ -70,6 +72,9 @@ export function ContentPlannerContent() {
   const [deleteProgress, setDeleteProgress] = useState<{ completed: number; total: number } | null>(null);
   const [publishJobs, setPublishJobs] = useState<PublishJobPreview[]>([]);
   const [publishSettings, setPublishSettings] = useState<PublishSettings>({ autoPublishEnabled: false });
+  const [preparedPostId, setPreparedPostId] = useState("");
+  const [preparedPostSku, setPreparedPostSku] = useState("");
+  const [aiAction, setAiAction] = useState<"caption" | "image" | null>(null);
   const [status, setStatus] = useState("Đang tải planner...");
 
   async function loadPlanner(nextStatus = "Planner sẵn sàng: chọn sản phẩm, ảnh AI, caption và lịch đăng trên cùng một màn.") {
@@ -118,6 +123,36 @@ export function ContentPlannerContent() {
     }
   }
 
+  async function composeAiPost() {
+    if (!selectedProductSku) return void setStatus("Chọn sản phẩm trước khi nhờ AI soạn bài.");
+    setAiAction("caption");
+    try {
+      const response = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          task: "caption",
+          productSku: selectedProductSku,
+          prompt: "Viết bài Facebook bán hàng tự nhiên, dễ đọc trên điện thoại, chỉ dùng dữ liệu sản phẩm thật và kết thúc bằng lời mời nhắn tin."
+        })
+      });
+      const payload = (await response.json()) as {
+        success: boolean;
+        data?: { text?: string; mode?: "ai" | "template"; notice?: string };
+        error?: string;
+      };
+      if (!response.ok || !payload.success || !payload.data?.text) {
+        setStatus(payload.error || "AI chưa soạn được bài.");
+        return;
+      }
+      if (!manualTitle.trim()) setManualTitle(selectedProductName || selectedProductSku);
+      setManualCaption(payload.data.text);
+      setStatus(payload.data.mode === "ai" ? "AI đã soạn bài từ dữ liệu sản phẩm thật." : payload.data.notice || "Đã dùng mẫu nội dung an toàn.");
+    } finally {
+      setAiAction(null);
+    }
+  }
+
   function resetManualForm() {
     setManualTitle("");
     setManualCaption("");
@@ -126,6 +161,8 @@ export function ContentPlannerContent() {
     setMediaFile(null);
     setMediaPreviewUrl("");
     setSelectedAiAsset(null);
+    setPreparedPostId("");
+    setPreparedPostSku("");
   }
 
   async function uploadManualMedia(postId: string) {
@@ -163,7 +200,11 @@ export function ContentPlannerContent() {
     return true;
   }
 
-  async function createPost(mode: "draft" | "schedule" | "publish", idea?: ContentIdea) {
+  async function createPost(
+    mode: "draft" | "schedule" | "publish",
+    idea?: ContentIdea,
+    options: { keepForm?: boolean } = {}
+  ) {
     const pageIds = selectedPageIds.length ? selectedPageIds : defaultPageSelection(pages).slice(0, 1);
     const source = idea ?? {
       title: manualTitle,
@@ -180,16 +221,37 @@ export function ContentPlannerContent() {
     if (pageIds.length === 0) return void setStatus("Chưa có Fanpage để tạo target bài đăng.");
 
     const autoCreateImageflow = !mediaFile && !selectedAiAsset;
-    const response = await fetch("/api/content/posts", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...source, pageId: pageIds[0], pageIds, status: "draft", autoCreateImageflow })
-    });
-    const payload = (await response.json()) as {
+    const reusablePostId = !idea && preparedPostSku === source.productSku ? preparedPostId : "";
+    let payload: {
       success: boolean;
       data?: { post: ContentPost; imageflowJob?: { id: string; status: string } | null; imageflowError?: string | null };
       error?: string;
     };
+    if (reusablePostId) {
+      const response = await fetch(`/api/content/posts/${encodeURIComponent(reusablePostId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...source, pageId: pageIds[0], pageIds, status: "draft" })
+      });
+      payload = (await response.json()) as typeof payload;
+      if (payload.success && payload.data && autoCreateImageflow) {
+        const imageResponse = await fetch(`/api/content/posts/${encodeURIComponent(reusablePostId)}/imageflow`, { method: "POST" });
+        const imagePayload = (await imageResponse.json()) as {
+          success: boolean;
+          data?: { imageflowJob?: { id: string; status: string } };
+          error?: string;
+        };
+        payload.data.imageflowJob = imagePayload.data?.imageflowJob ?? null;
+        payload.data.imageflowError = imagePayload.success ? null : imagePayload.error || "IMAGEFLOW_JOB_CREATE_FAILED";
+      }
+    } else {
+      const response = await fetch("/api/content/posts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...source, pageId: pageIds[0], pageIds, status: "draft", autoCreateImageflow })
+      });
+      payload = (await response.json()) as typeof payload;
+    }
     if (!payload.success || !payload.data) return void setStatus(payload.error || "Lưu bài lỗi.");
 
     if (!(await uploadManualMedia(payload.data.post.id))) return;
@@ -206,6 +268,17 @@ export function ContentPlannerContent() {
       return;
     }
 
+    if (options.keepForm && !idea) {
+      setPreparedPostId(payload.data.post.id);
+      setPreparedPostSku(source.productSku);
+      await loadPlanner(
+        payload.data.imageflowError
+          ? `Đã lưu bài nhưng chưa xếp tạo ảnh được: ${payload.data.imageflowError}`
+          : "Đã lưu nội dung và xếp tạo ảnh AI. Bạn có thể tiếp tục sửa rồi đặt lịch."
+      );
+      return;
+    }
+
     if (!idea) resetManualForm();
     if (payload.data.imageflowError || payload.data.imageflowJob) {
       await loadPlanner(
@@ -218,6 +291,15 @@ export function ContentPlannerContent() {
     await loadPlanner("Đã lưu bài nháp.");
   }
 
+  async function queueAiImage() {
+    setAiAction("image");
+    try {
+      await createPost("draft", undefined, { keepForm: true });
+    } finally {
+      setAiAction(null);
+    }
+  }
+
   async function schedulePost(post: ContentPost, localValue = scheduledAt, pageIds = selectedPageIds) {
     if (!localValue) return void setStatus("Cần chọn ngày giờ cụ thể trước khi lên lịch.");
     const targetPageIds = pageIds.length ? pageIds : [post.pageId];
@@ -228,14 +310,14 @@ export function ContentPlannerContent() {
     });
     const payload = (await response.json()) as { success: boolean; error?: string };
     setScheduleDraft(null);
-    await loadPlanner(payload.success ? "Đã lên lịch và tạo job riêng từng Fanpage." : payload.error || "Lên lịch lỗi.");
+    await loadPlanner(payload.success ? "Đã lên lịch riêng cho từng Fanpage." : payload.error || "Lên lịch lỗi.");
   }
 
   async function publishPost(post: ContentPost, pageIds = selectedPageIds) {
     const targetPageIds = pageIds.length ? pageIds : [post.pageId];
     if (publishSettings.autoPublishEnabled) {
-      const confirmed = window.confirm("AUTO_PUBLISH_POSTS_ENABLED=true: thao tác này sẽ đăng thật lên Facebook. Tiếp tục?");
-      if (!confirmed) return void setStatus("Đã huỷ publish thật trước khi gọi Facebook API.");
+      const confirmed = window.confirm("Bài này sẽ được gửi thật lên Facebook sau khi ảnh sẵn sàng. Tiếp tục?");
+      if (!confirmed) return void setStatus("Đã huỷ gửi bài lên Facebook.");
     }
     const response = await fetch(`/api/content/posts/${encodeURIComponent(post.id)}/publish`, {
       method: "POST",
@@ -251,7 +333,7 @@ export function ContentPlannerContent() {
         await loadPlanner("Đã xếp publish job chờ ảnh hoàn tất, không đăng bài chữ.");
         return;
       }
-      await loadPlanner(dryRun ? "Đã tạo publish job dry-run vì AUTO_PUBLISH_POSTS_ENABLED=false." : "Đã gửi publish job thật.");
+      await loadPlanner(dryRun ? "Đã lưu bài trong CRM; chế độ đăng thật đang tắt." : "Đã gửi bài thật lên Facebook.");
     } else {
       await loadPlanner(payload.error || "Tạo publish job lỗi.");
     }
@@ -366,16 +448,6 @@ export function ContentPlannerContent() {
   const scheduledCount = posts.filter((post) => post.status === "scheduled").length;
   const publishedCount = posts.filter((post) => post.status === "published").length;
 
-  const plannerSteps = useMemo(
-    () => [
-      { label: "Sản phẩm", active: Boolean(selectedProductSku) },
-      { label: "Ảnh AI", active: Boolean(selectedAiAsset || mediaPreviewUrl) },
-      { label: "Caption", active: Boolean(manualTitle.trim() || manualCaption.trim()) },
-      { label: "Lịch đăng", active: Boolean(scheduledAt || selectedPageIds.length > 0) }
-    ],
-    [manualCaption, manualTitle, mediaPreviewUrl, scheduledAt, selectedAiAsset, selectedPageIds.length, selectedProductSku]
-  );
-
   return (
     <div className="space-y-4">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -399,7 +471,7 @@ export function ContentPlannerContent() {
             className="inline-flex min-h-10 items-center gap-2 rounded-2xl bg-[#6f8fe8] px-4 text-sm font-semibold text-white"
           >
             <WandSparkles className="h-4 w-4" aria-hidden="true" />
-            Gợi ý
+            Tạo 7 ý tưởng
           </button>
         </div>
       </div>
@@ -424,7 +496,7 @@ export function ContentPlannerContent() {
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill tone="info">Flow một màn: sản phẩm → ảnh → caption → lịch</StatusPill>
                 <StatusPill tone={publishSettings.autoPublishEnabled ? "danger" : "warning"}>
-                  {publishSettings.autoPublishEnabled ? "Đăng thật đang bật" : "Nháp an toàn"}
+                  {publishSettings.autoPublishEnabled ? "Tự động đăng đang bật" : "Chưa đăng thật"}
                 </StatusPill>
               </div>
             </div>
@@ -436,19 +508,6 @@ export function ContentPlannerContent() {
               <PlannerMetric label="Page chọn" value={selectedPageIds.length || 0} />
             </div>
 
-            <div className="mt-4 grid gap-2 md:grid-cols-4">
-              {plannerSteps.map((step, index) => (
-                <article
-                  key={step.label}
-                  className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${
-                    step.active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-stone-200 bg-stone-50 text-stone-500"
-                  }`}
-                >
-                  <span className="mr-2 text-stone-400">{index + 1}</span>
-                  {step.label}
-                </article>
-              ))}
-            </div>
           </div>
 
           <div className="grid gap-3 xl:grid-cols-[1.28fr_0.72fr]">
@@ -464,6 +523,7 @@ export function ContentPlannerContent() {
               manualCaption={manualCaption}
               manualCta={manualCta}
               scheduledAt={scheduledAt}
+              aiAction={aiAction}
               aiImagePicker={
                 <ContentPlannerAiImagePicker
                   initialAssetId={searchParams.get("imageflowAssetId")}
@@ -486,104 +546,69 @@ export function ContentPlannerContent() {
                 setSelectedProductSku(product?.sku ?? "");
                 setSelectedProductName(product?.name ?? "");
                 setSelectedAiAsset(null);
+                setPreparedPostId("");
+                setPreparedPostSku("");
               }}
               onPageToggle={(pageId, checked) =>
                 setSelectedPageIds((current) => (checked ? [...new Set([...current, pageId])] : current.filter((id) => id !== pageId)))
               }
               onMediaChange={updateMedia}
+              onComposeAi={() => void composeAiPost()}
+              onCreateAiImage={() => void queueAiImage()}
               onSave={(mode) => void createPost(mode)}
             />
 
-            <ContentPlannerPostList
-              posts={posts}
-              pages={pages}
-              selectedPageIds={selectedPageIds}
-              publishJobs={publishJobs}
-              editing={editing}
-              scheduleDraft={scheduleDraft}
-              deleteCandidate={deleteCandidate}
-              deletingPostId={deletingPostId}
-              deleteAllOpen={deleteAllOpen}
-              deleteAllConfirmed={deleteAllConfirmed}
-              deleteProgress={deleteProgress}
-              onStartEdit={startEdit}
-              onEditChange={(patch) => setEditing((current) => (current ? { ...current, ...patch } : current))}
-              onEditPageToggle={(pageId, checked) =>
-                setEditing((current) =>
-                  current
-                    ? { ...current, pageIds: checked ? [...new Set([...current.pageIds, pageId])] : current.pageIds.filter((id) => id !== pageId) }
-                    : current
-                )
-              }
-              onCancelEdit={() => setEditing(null)}
-              onSaveEdit={() => void saveEdit()}
-              onOpenSchedule={(post) => setScheduleDraft({ id: post.id, title: post.title, scheduledAt: localFromIso(post.scheduledAt) || scheduledAt })}
-              onScheduleChange={(value) => setScheduleDraft((current) => (current ? { ...current, scheduledAt: value } : current))}
-              onCancelSchedule={() => setScheduleDraft(null)}
-              onSaveSchedule={(post) => void schedulePost(post, scheduleDraft?.scheduledAt || scheduledAt)}
-              onPublish={(post) => void publishPost(post)}
-              onRequestDelete={setDeleteCandidate}
-              onCancelDelete={() => setDeleteCandidate(null)}
-              onConfirmDelete={(post) => void deletePost(post)}
-              onRequestDeleteAll={() => setDeleteAllOpen(true)}
-              onDeleteAllConfirmedChange={setDeleteAllConfirmed}
-              onCancelDeleteAll={() => {
-                if (deleteProgress) return;
-                setDeleteAllOpen(false);
-                setDeleteAllConfirmed(false);
-              }}
-              onConfirmDeleteAll={() => void deleteAllPosts()}
-            />
+            <div className="space-y-3">
+              <ContentAutomationPanel
+                pages={pages}
+                settings={publishSettings}
+                onFinished={(message) => loadPlanner(message)}
+              />
+              <GrowthRoadmap title="Lộ trình phát triển Fanpage" />
+              <ContentPlannerPostList
+                posts={posts}
+                pages={pages}
+                selectedPageIds={selectedPageIds}
+                publishJobs={publishJobs}
+                editing={editing}
+                scheduleDraft={scheduleDraft}
+                deleteCandidate={deleteCandidate}
+                deletingPostId={deletingPostId}
+                deleteAllOpen={deleteAllOpen}
+                deleteAllConfirmed={deleteAllConfirmed}
+                deleteProgress={deleteProgress}
+                onStartEdit={startEdit}
+                onEditChange={(patch) => setEditing((current) => (current ? { ...current, ...patch } : current))}
+                onEditPageToggle={(pageId, checked) =>
+                  setEditing((current) =>
+                    current
+                      ? { ...current, pageIds: checked ? [...new Set([...current.pageIds, pageId])] : current.pageIds.filter((id) => id !== pageId) }
+                      : current
+                  )
+                }
+                onCancelEdit={() => setEditing(null)}
+                onSaveEdit={() => void saveEdit()}
+                onOpenSchedule={(post) => setScheduleDraft({ id: post.id, title: post.title, scheduledAt: localFromIso(post.scheduledAt) || scheduledAt })}
+                onScheduleChange={(value) => setScheduleDraft((current) => (current ? { ...current, scheduledAt: value } : current))}
+                onCancelSchedule={() => setScheduleDraft(null)}
+                onSaveSchedule={(post) => void schedulePost(post, scheduleDraft?.scheduledAt || scheduledAt)}
+                onPublish={(post) => void publishPost(post)}
+                onRequestDelete={setDeleteCandidate}
+                onCancelDelete={() => setDeleteCandidate(null)}
+                onConfirmDelete={(post) => void deletePost(post)}
+                onRequestDeleteAll={() => setDeleteAllOpen(true)}
+                onDeleteAllConfirmedChange={setDeleteAllConfirmed}
+                onCancelDeleteAll={() => {
+                  if (deleteProgress) return;
+                  setDeleteAllOpen(false);
+                  setDeleteAllConfirmed(false);
+                }}
+                onConfirmDeleteAll={() => void deleteAllPosts()}
+              />
+            </div>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-2">
-            <section className="rounded-[24px] border border-stone-200 bg-white p-4">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-stone-900">Gợi ý lịch & chủ đề</h2>
-                <StatusPill tone="neutral">{suggestions.length}</StatusPill>
-              </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-2">
-                {suggestions.slice(0, 4).map((item) => (
-                  <div key={`${item.date}-${item.suggestedTemplate}`} className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
-                    <div className="text-sm font-semibold text-stone-900">{new Date(item.date).toLocaleDateString("vi-VN")}</div>
-                    <div className="mt-1 text-sm text-stone-600">{item.theme}</div>
-                    <div className="mt-2">
-                      <StatusPill tone="neutral">{item.suggestedTemplate}</StatusPill>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="rounded-[24px] border border-stone-200 bg-white p-4">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-stone-900">Gợi ý nội dung mới</h2>
-                <StatusPill tone="info">{ideas.length}</StatusPill>
-              </div>
-              <div className="mt-3 grid gap-2">
-                {ideas.slice(0, 2).map((idea) => (
-                  <article key={idea.id} className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <StatusPill tone="info">{idea.template}</StatusPill>
-                      <StatusPill tone={idea.aiMode === "ai" ? "success" : "warning"}>
-                        {idea.aiMode === "ai" ? "AI thật" : "Mẫu an toàn"}
-                      </StatusPill>
-                    </div>
-                    <h3 className="mt-2 text-sm font-semibold text-stone-900">{idea.title}</h3>
-                    <p className="mt-1 line-clamp-3 text-sm text-stone-600">{idea.caption}</p>
-                    <button
-                      type="button"
-                      onClick={() => void createPost("draft", idea)}
-                      className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-2xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700"
-                    >
-                      <FilePlus2 className="h-4 w-4" aria-hidden="true" />
-                      Lưu thành nháp
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </section>
-          </div>
+          <ContentIdeaPanels suggestions={suggestions} ideas={ideas} onSaveIdea={(idea) => void createPost("draft", idea)} />
         </div>
       </section>
     </div>

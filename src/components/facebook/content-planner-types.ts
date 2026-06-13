@@ -57,4 +57,6 @@ export type PublishJobPreview = {
 
 export type PublishSettings = {
   autoPublishEnabled: boolean;
+  automationConfigured?: boolean;
+  operatorRunEnabled?: boolean;
 };
