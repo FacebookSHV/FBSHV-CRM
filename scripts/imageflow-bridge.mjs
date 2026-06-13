@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const baseUrl = (process.env.FBSHV_CRM_BASE_URL || "https://fbshv-crm.ngchihuy.workers.dev").replace(/\/$/, "");
+const imageflowBaseUrl = (process.env.IMAGEFLOW_LOCAL_BASE_URL || "http://127.0.0.1:7096").replace(/\/$/, "");
 const token = process.env.IMAGEFLOW_BRIDGE_TOKEN || "";
 const workDir = process.env.IMAGEFLOW_WORK_DIR || "D:\\codex_manager_v3.1\\tools\\imageflow\\work\\crm_bridge";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -34,6 +35,7 @@ function statusForLocalError(message) {
   const normalized = message.toLowerCase();
   const recoverableMarkers = [
     "queue is busy",
+    "imageflow local queue is busy",
     "queue is already running",
     "pipeline lock",
     "profile",
@@ -42,6 +44,7 @@ function statusForLocalError(message) {
     "cdp",
     "no prompt profile",
     "no render profile",
+    "pool scheduler",
     "cannot start imageflow"
   ];
   return recoverableMarkers.some((marker) => normalized.includes(marker)) ? "needs_user" : "failed";
@@ -67,6 +70,33 @@ async function crmFetch(pathname, init = {}) {
     throw new Error(data.error || `CRM request failed: ${response.status}`);
   }
   return data.data;
+}
+
+async function imageflowFetch(pathname, init = {}) {
+  const response = await fetch(`${imageflowBaseUrl}${pathname}`, {
+    ...init,
+    headers: {
+      "content-type": "application/json",
+      ...(init.headers || {})
+    }
+  });
+  const text = await response.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { ok: false, message: text };
+  }
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.message || data.error || `ImageFlow request failed: ${response.status}`);
+  }
+  return data;
+}
+
+async function assertPoolSchedulerReady() {
+  await imageflowFetch("/api/pool/status").catch((error) => {
+    throw new Error(`Pool Scheduler chưa sẵn sàng tại ${imageflowBaseUrl}: ${sanitizeError(error)}`);
+  });
 }
 
 async function claimJob() {
@@ -121,15 +151,27 @@ async function runImageflowCommand(jobFile, outputDir) {
   if (!command.trim()) return { configured: false };
   return new Promise((resolve, reject) => {
     let settled = false;
+    let stdoutTail = "";
+    let stderrTail = "";
     const child = spawn(command, {
       shell: true,
-      stdio: "inherit",
+      stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
         IMAGEFLOW_JOB_FILE: jobFile,
         IMAGEFLOW_JOB_ID: path.basename(path.dirname(jobFile)),
         IMAGEFLOW_OUTPUT_DIR: outputDir
       }
+    });
+    child.stdout?.on("data", (chunk) => {
+      const text = String(chunk);
+      process.stdout.write(text);
+      stdoutTail = `${stdoutTail}${text}`.slice(-4000);
+    });
+    child.stderr?.on("data", (chunk) => {
+      const text = String(chunk);
+      process.stderr.write(text);
+      stderrTail = `${stderrTail}${text}`.slice(-4000);
     });
     const finish = (callback) => {
       if (settled) return;
@@ -142,7 +184,14 @@ async function runImageflowCommand(jobFile, outputDir) {
       finish(() => reject(new Error(`adapter_timeout: ImageFlow adapter did not finish within ${adapterTimeoutMs}ms`)));
     }, Math.max(60_000, adapterTimeoutMs));
     child.on("exit", (code) =>
-      finish(() => (code === 0 ? resolve({ configured: true }) : reject(new Error(`IMAGEFLOW_COMMAND exited ${code}`))))
+      finish(() => {
+        if (code === 0) {
+          resolve({ configured: true });
+          return;
+        }
+        const detail = [stderrTail.trim(), stdoutTail.trim()].filter(Boolean).join("\n");
+        reject(new Error(detail ? `IMAGEFLOW_COMMAND exited ${code}: ${detail}` : `IMAGEFLOW_COMMAND exited ${code}`));
+      })
     );
     child.on("error", (error) => finish(() => reject(error)));
   });
@@ -192,7 +241,7 @@ async function processJob(job) {
   const needsReview = job.targetFormat === "landing_page";
   await patchJob(job.id, {
     status: needsReview ? "needs_user" : "completed",
-    error: needsReview ? `Ảnh đã về CRM. Cần duyệt ảnh trong màn hình Cầu nối ảnh AI trước khi dùng trên landing page.` : null,
+    error: needsReview ? "Anh da ve CRM. Can duyet anh trong man hinh tao noi dung/landing page truoc khi dung." : null,
     resultManifestJson: { ...manifest, uploadedCount: imagePaths.length, completedBy: workerId, reviewRequired: needsReview }
   });
   log(`job ${job.id} ${needsReview ? "waiting for review" : "completed"}, uploaded ${imagePaths.length} image(s)`);
@@ -205,6 +254,7 @@ async function tick() {
   }
   tickRunning = true;
   try {
+    await assertPoolSchedulerReady();
     const job = await claimJob();
     if (!job) {
       emptyCount += 1;

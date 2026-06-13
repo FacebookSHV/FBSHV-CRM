@@ -3,20 +3,10 @@ import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path";
 
 const imageflowBaseUrl = (process.env.IMAGEFLOW_LOCAL_BASE_URL || "http://127.0.0.1:7096").replace(/\/$/, "");
-const imageflowConfigPath =
-  process.env.IMAGEFLOW_CONFIG_PATH || "D:\\codex_manager_v3.1\\tools\\imageflow\\pipeline_config.json";
 const jobFile = process.env.IMAGEFLOW_JOB_FILE || "";
 const outputDir = process.env.IMAGEFLOW_OUTPUT_DIR || "";
 const pollIntervalMs = Number(process.env.IMAGEFLOW_CRM_POLL_INTERVAL_MS || 10000);
 const timeoutMs = Number(process.env.IMAGEFLOW_CRM_TIMEOUT_MS || 30 * 60 * 1000);
-
-function positiveInteger(value, fallback) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 1 ? Math.floor(number) : fallback;
-}
-
-const maxPromptProfiles = positiveInteger(process.env.IMAGEFLOW_CRM_MAX_PROMPT_PROFILES, 1);
-const maxRenderProfiles = positiveInteger(process.env.IMAGEFLOW_CRM_MAX_RENDER_PROFILES, 1);
 
 function log(message) {
   process.stdout.write(`[imageflow-crm-adapter] ${message}\n`);
@@ -46,6 +36,13 @@ async function httpJson(pathname, init = {}) {
     throw new Error(data.message || data.error || `ImageFlow request failed: ${response.status}`);
   }
   return data;
+}
+
+async function assertPoolSchedulerReady() {
+  await httpJson("/api/pool/status").catch((error) => {
+    throw new Error(`Pool Scheduler chua san sang tai ${imageflowBaseUrl}: ${error.message}`);
+  });
+  log("Pool Scheduler ready; ImageFlow will allocate account/profile.");
 }
 
 function parseJson(value, fallback = {}) {
@@ -87,27 +84,6 @@ function safeSlug(value) {
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 90);
-}
-
-async function readImageflowProfiles() {
-  const config = parseJson(await readFile(imageflowConfigPath, "utf8").catch(() => "{}"));
-  const chatgpt = config.chatgpt && typeof config.chatgpt === "object" ? config.chatgpt : {};
-  const promptConfig = config.chatgpt_prompt && typeof config.chatgpt_prompt === "object" ? config.chatgpt_prompt : {};
-  const promptProfileIds = Array.from(
-    new Set(
-      [...(Array.isArray(promptConfig.profile_ids) ? promptConfig.profile_ids : []), ...(Array.isArray(chatgpt.prompt_profile_ids) ? chatgpt.prompt_profile_ids : [])]
-        .map(String)
-        .filter(Boolean)
-    )
-  );
-  const renderProfileIds = Array.from(
-    new Set((Array.isArray(chatgpt.profile_ids) ? chatgpt.profile_ids : []).map(String).filter(Boolean))
-  );
-  return {
-    provider: String(config.prompt_provider || "chatgpt"),
-    promptProfileIds: promptProfileIds.slice(0, maxPromptProfiles),
-    renderProfileIds: renderProfileIds.slice(0, maxRenderProfiles)
-  };
 }
 
 function normalizeImages(...values) {
@@ -314,20 +290,6 @@ function findQueueItem(queue, sku, preferredPipeline = "") {
   return matches[0];
 }
 
-function findActiveQueueItem(queue) {
-  const activeStatuses = new Set(["rendering", "running", "prompting", "processing"]);
-  return (Array.isArray(queue.items) ? queue.items : []).find((item) => {
-    const status = String(item.status || "").toLowerCase();
-    const renderStatus = String(item.render_status || "").toLowerCase();
-    return activeStatuses.has(status) || activeStatuses.has(renderStatus);
-  });
-}
-
-function queueItemLabel(item) {
-  const product = item?.product && typeof item.product === "object" ? item.product : {};
-  return String(item?.sku || product.sku || product.platform_sku || item?.id || "unknown");
-}
-
 function queueItemRenderComplete(item, requestedCount) {
   const status = String(item?.status || "").toLowerCase();
   const promptStatus = String(item?.prompt_status || "").toLowerCase();
@@ -518,20 +480,12 @@ async function main() {
     return;
   }
 
+  await assertPoolSchedulerReady();
+
   const job = parseJson(await readFile(jobFile, "utf8"));
   const product = buildProduct(job);
   if (!product.sku) throw new Error("CRM job missing product SKU.");
   const imageflowPipeline = imageflowPipelineForJob(job);
-
-  const status = await httpJson("/api/status");
-  const queueBefore = await httpJson("/api/product-queue");
-  const cdpRunnerActive = Boolean(status.cdp_queue?.running);
-  const activeItem = findActiveQueueItem(queueBefore);
-  if (cdpRunnerActive || activeItem) {
-    throw new Error(
-      `ImageFlow local queue is busy${activeItem ? ` with ${queueItemLabel(activeItem)}` : ""}. Wait for it to finish, then run the bridge again.`
-    );
-  }
 
   const addResult = await httpJson("/api/product-queue/add", {
     method: "POST",
@@ -552,28 +506,17 @@ async function main() {
   );
 
   const renderStartedAt = Date.now();
-  if (!cdpRunnerActive) {
-    const profiles = await readImageflowProfiles();
-    if (!profiles.promptProfileIds.length) throw new Error("ImageFlow config has no prompt profile IDs.");
-    if (!profiles.renderProfileIds.length) throw new Error("ImageFlow config has no render profile IDs.");
-    log(
-      `safe profile mode: prompt=${profiles.promptProfileIds.join(",")}; render=${profiles.renderProfileIds.join(",")}; no multi-profile fanout`
-    );
-    await httpJson("/api/product-queue/start", {
-      method: "POST",
-      body: JSON.stringify({
-        ...(imageflowPipeline ? { pipeline: imageflowPipeline } : {}),
-        automation_mode: "cdp",
-        provider: profiles.provider,
-        prompt_profile_ids: profiles.promptProfileIds,
-        render_profile_ids: profiles.renderProfileIds,
-        queue_ids: [item.id],
-        target_count: Number(job.requestedCount || 5)
-      })
-    }).catch((error) => {
-      throw new Error(`Cannot start ImageFlow CDP queue: ${error.message}`);
-    });
-  }
+  await httpJson("/api/product-queue/start", {
+    method: "POST",
+    body: JSON.stringify({
+      ...(imageflowPipeline ? { pipeline: imageflowPipeline } : {}),
+      automation_mode: "cdp",
+      queue_ids: [item.id],
+      target_count: Number(job.requestedCount || 5)
+    })
+  }).catch((error) => {
+    throw new Error(`Cannot start ImageFlow Pool Scheduler queue: ${error.message}`);
+  });
 
   const finalPaths = await waitForFinalImages(item.id, Number(job.requestedCount || 5), renderStartedAt);
   await mkdir(outputDir, { recursive: true });

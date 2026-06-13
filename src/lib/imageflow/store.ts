@@ -369,6 +369,39 @@ export async function getImageflowJob(id: string) {
   return row ? attachDetails(mapJob(row)) : null;
 }
 
+export async function getImageflowJobByPostId(postId: string) {
+  const safePostId = postId.trim();
+  if (!safePostId) return null;
+  const db = await getD1Database();
+  if (!db) {
+    const job = [...memoryJobs.values()]
+      .filter((item) => item.postId === safePostId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+    return job ? attachDetails(job) : null;
+  }
+  const row = await db
+    .prepare(
+      `select id, workspace_id, post_id, product_sku, title, status, target_format, target_aspect_ratio,
+       output_width, output_height, requested_count, prompt_json, product_context_json, result_manifest_json,
+       error, locked_by, locked_until, created_at, updated_at, started_at, finished_at
+       from imageflow_jobs where post_id = ? and workspace_id = ? order by updated_at desc limit 1`
+    )
+    .bind(safePostId, DEFAULT_WORKSPACE_ID)
+    .first<ImageflowJobRow>();
+  return row ? attachDetails(mapJob(row)) : null;
+}
+
+export async function ensureImageflowJobForPost(input: CreateImageflowJobInput & { postId: string }) {
+  const postId = input.postId.trim();
+  if (!postId) throw new Error("IMAGEFLOW_POST_REQUIRED: Can co postId de tao anh tu dong.");
+  const existing = await getImageflowJobByPostId(postId);
+  if (!existing) return createImageflowJob({ ...input, postId });
+  if (existing.status === "failed" || existing.status === "cancelled") {
+    return updateImageflowJob(existing.id, { status: "queued", error: null });
+  }
+  return existing;
+}
+
 export async function claimNextImageflowJob(workerId: string) {
   const lockedBy = workerId.trim() || "local-imageflow";
   const db = await getD1Database();
@@ -444,13 +477,28 @@ export async function updateImageflowJob(id: string, patch: ImageflowJobPatch) {
   if (!existing) throw new Error("IMAGEFLOW_JOB_NOT_FOUND: Không tìm thấy job ImageFlow.");
   const updatedAt = nowIso();
   const nextStatus = patch.status ? statusOrDefault(patch.status) : existing.status;
-  const finishedAt = nextStatus === "completed" || nextStatus === "failed" || nextStatus === "cancelled" ? updatedAt : existing.finishedAt;
+  const resetForQueue = nextStatus === "queued";
+  const finishedAt = resetForQueue
+    ? null
+    : nextStatus === "completed" || nextStatus === "failed" || nextStatus === "cancelled"
+      ? updatedAt
+      : existing.finishedAt;
   const resultManifestJson = patch.resultManifestJson === undefined ? existing.resultManifestJson : safeJson(patch.resultManifestJson);
   const error = patch.error === undefined ? existing.error : patch.error;
 
   const db = await getD1Database();
   if (!db) {
-    const next = { ...existing, status: nextStatus, error, resultManifestJson, updatedAt, finishedAt };
+    const next = {
+      ...existing,
+      status: nextStatus,
+      error,
+      resultManifestJson,
+      updatedAt,
+      finishedAt,
+      lockedBy: resetForQueue ? null : existing.lockedBy,
+      lockedUntil: resetForQueue ? null : existing.lockedUntil,
+      startedAt: resetForQueue ? null : existing.startedAt
+    };
     memoryJobs.set(id, next);
     return attachDetails(next);
   }
@@ -458,10 +506,13 @@ export async function updateImageflowJob(id: string, patch: ImageflowJobPatch) {
   await db
     .prepare(
       `update imageflow_jobs
-       set status = ?, error = ?, result_manifest_json = ?, updated_at = ?, finished_at = ?
+       set status = ?, error = ?, result_manifest_json = ?, updated_at = ?, finished_at = ?,
+           locked_by = case when ? = 1 then null else locked_by end,
+           locked_until = case when ? = 1 then null else locked_until end,
+           started_at = case when ? = 1 then null else started_at end
        where id = ? and workspace_id = ?`
     )
-    .bind(nextStatus, error, resultManifestJson, updatedAt, finishedAt, id, DEFAULT_WORKSPACE_ID)
+    .bind(nextStatus, error, resultManifestJson, updatedAt, finishedAt, resetForQueue ? 1 : 0, resetForQueue ? 1 : 0, resetForQueue ? 1 : 0, id, DEFAULT_WORKSPACE_ID)
     .run();
   return getImageflowJob(id);
 }

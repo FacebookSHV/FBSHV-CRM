@@ -11,6 +11,7 @@ const excludedDirs = new Set([
   ".wrangler",
   "build",
   "dist",
+  "work",
   "node_modules"
 ]);
 const excludedFiles = new Set(["package-lock.json"]);

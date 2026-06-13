@@ -1,10 +1,10 @@
 "use client";
 
-import { CalendarPlus, Pencil, Save, Send, Trash2, X } from "lucide-react";
+import { Pencil, Save, X } from "lucide-react";
 import type { ReactNode } from "react";
+import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { ProductSearchPicker } from "@/components/products/product-search-picker";
 import { StatusPill } from "@/components/ui/status-pill";
-import type { ProductWithInventory } from "@/lib/ecommerce/types";
 import { GoldenHourButtons } from "./content-planner-editor";
 import type {
   ContentPost,
@@ -44,6 +44,23 @@ function statusTone(status: ContentPost["status"]) {
   return "neutral" as const;
 }
 
+function statusLabel(status: ContentPost["status"]) {
+  if (status === "draft") return "Nháp";
+  if (status === "scheduled") return "Lịch";
+  if (status === "published") return "Đã đăng";
+  if (status === "failed") return "Lỗi";
+  if (status === "cancelled") return "Huỷ";
+  return status;
+}
+
+function publishJobLabel(status: string, dryRun: boolean) {
+  if (dryRun || status === "dry_run") return "Chạy thử";
+  if (status === "published") return "Đã đăng";
+  if (status === "failed") return "Lỗi";
+  if (status === "pending") return "Đang chờ";
+  return status;
+}
+
 function jobTone(status: string, dryRun: boolean) {
   if (dryRun || status === "dry_run") return "warning" as const;
   if (status === "published") return "success" as const;
@@ -60,21 +77,72 @@ function canDelete(post: ContentPost) {
   return post.status === "draft" || post.status === "scheduled";
 }
 
-function postStatusLabel(status: ContentPost["status"]) {
-  if (status === "draft") return "Bài nháp";
-  if (status === "scheduled") return "Đã lên lịch";
-  if (status === "published") return "Đã đăng";
-  if (status === "failed") return "Đăng lỗi";
-  if (status === "cancelled") return "Đã huỷ";
-  return status;
-}
-
-function publishJobLabel(status: string, dryRun: boolean) {
-  if (dryRun || status === "dry_run") return "Chạy thử";
-  if (status === "published") return "Đã đăng";
-  if (status === "failed") return "Đăng lỗi";
-  if (status === "pending") return "Đang chờ";
-  return status;
+function PlannerListRow({
+  post,
+  selectedPageIds,
+  onStartEdit,
+  onOpenSchedule,
+  onPublish,
+  onRequestDelete
+}: {
+  post: ContentPost;
+  selectedPageIds: string[];
+  onStartEdit: (post: ContentPost) => void;
+  onOpenSchedule: (post: ContentPost) => void;
+  onPublish: (post: ContentPost) => void;
+  onRequestDelete: (post: ContentPost) => void;
+}) {
+  return (
+    <article className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-stone-500">
+          <Pencil className="h-4 w-4" aria-hidden="true" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate text-sm font-semibold text-stone-900">{post.title}</h3>
+            <StatusPill tone={statusTone(post.status)}>{statusLabel(post.status)}</StatusPill>
+          </div>
+          <div className="mt-1 text-xs text-stone-500">
+            {formatSchedule(post.scheduledAt)}{post.productSku ? ` • ${post.productSku}` : ""}
+          </div>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-stone-600">{post.caption}</p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onStartEdit(post)}
+          className="inline-flex h-9 items-center justify-center rounded-xl border border-stone-200 px-3 text-xs font-semibold text-stone-700"
+        >
+          Sửa
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenSchedule(post)}
+          className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700"
+          title={`Chỉnh lịch cho ${selectedPageIds.length || 1} page`}
+        >
+          Lịch
+        </button>
+        <button
+          type="button"
+          onClick={() => onPublish(post)}
+          className="inline-flex h-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700"
+        >
+          Gửi
+        </button>
+        <button
+          type="button"
+          onClick={() => onRequestDelete(post)}
+          disabled={!canDelete(post)}
+          className="inline-flex h-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-700 disabled:opacity-40"
+        >
+          Xoá
+        </button>
+      </div>
+    </article>
+  );
 }
 
 export function ContentPlannerPostList({
@@ -100,84 +168,53 @@ export function ContentPlannerPostList({
   onConfirmDelete
 }: ContentPlannerPostListProps) {
   const schedulePost = scheduleDraft ? posts.find((post) => post.id === scheduleDraft.id) ?? null : null;
+  const orderedPosts = [...posts].sort((left, right) => {
+    const leftValue = left.scheduledAt || left.updatedAt || left.id;
+    const rightValue = right.scheduledAt || right.updatedAt || right.id;
+    return rightValue.localeCompare(leftValue);
+  });
 
   return (
-    <section className="mt-4 rounded-md border border-slate-200 bg-white shadow-soft">
-      <div className="border-b border-slate-200 px-4 py-3">
-        <h2 className="text-sm font-semibold text-ink">Bài nháp và bài đã lên lịch</h2>
+    <section className="rounded-[24px] border border-stone-200 bg-[#fbfaf6] p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-stone-900">Bài đã lên lịch & nháp</h2>
+        <div className="flex gap-2">
+          <StatusPill tone="warning">{posts.filter((post) => post.status === "draft").length} nháp</StatusPill>
+          <StatusPill tone="success">{posts.filter((post) => post.status === "scheduled").length} lịch</StatusPill>
+        </div>
       </div>
-      <div className="divide-y divide-slate-100">
-        {posts.length === 0 ? (
-          <div className="p-4 text-sm text-slate-600">Chưa có bài nháp hoặc lịch đăng.</div>
-        ) : null}
-        {posts.map((post) => (
-          <article key={post.id} className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="min-w-0 truncate text-sm font-semibold text-ink">{post.title}</h3>
-                <StatusPill tone={statusTone(post.status)}>{postStatusLabel(post.status)}</StatusPill>
-                {post.productSku ? <span className="text-xs text-slate-500">SKU {post.productSku}</span> : null}
-              </div>
-              <p className="mt-2 line-clamp-2 text-sm text-slate-600">{post.caption}</p>
-              <p className="mt-1 text-xs text-slate-500">{formatSchedule(post.scheduledAt)}</p>
-            </div>
 
-            <div className="grid grid-cols-4 gap-2 md:flex md:justify-end">
-              <button
-                type="button"
-                onClick={() => onStartEdit(post)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-700 focus-ring"
-                aria-label="Chỉnh sửa bài"
-                title="Chỉnh sửa bài"
-              >
-                <Pencil className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onOpenSchedule(post)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-emerald-200 text-emerald-700 focus-ring"
-                aria-label="Chỉnh lịch đăng"
-                title={`Chỉnh lịch cho ${selectedPageIds.length || 1} Page`}
-              >
-                <CalendarPlus className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onPublish(post)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-brand-200 text-brand-700 focus-ring"
-                aria-label="Tạo lệnh đăng"
-                title={`Tạo lệnh đăng cho ${selectedPageIds.length || 1} Fanpage`}
-              >
-                <Send className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onRequestDelete(post)}
-                disabled={!canDelete(post)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-red-200 text-red-700 focus-ring disabled:opacity-40"
-                aria-label="Xoá bài"
-                title={canDelete(post) ? "Xoá bài nháp hoặc bài đã lên lịch" : "Chỉ xóa bài nháp hoặc bài đã lên lịch"}
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          </article>
-        ))}
+      <div className="space-y-2">
+        {orderedPosts.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-stone-300 bg-white px-4 py-6 text-sm text-stone-500">
+            Chưa có bài nháp hoặc lịch đăng.
+          </div>
+        ) : (
+          orderedPosts.slice(0, 4).map((post) => (
+            <PlannerListRow
+              key={post.id}
+              post={post}
+              selectedPageIds={selectedPageIds}
+              onStartEdit={onStartEdit}
+              onOpenSchedule={onOpenSchedule}
+              onPublish={onPublish}
+              onRequestDelete={onRequestDelete}
+            />
+          ))
+        )}
       </div>
 
       {publishJobs.length > 0 ? (
-        <div className="border-t border-slate-200 p-4">
-          <h3 className="text-sm font-semibold text-ink">Lệnh đăng mới nhất</h3>
-          <div className="mt-3 grid gap-2">
+        <div className="mt-3 rounded-2xl border border-stone-200 bg-white p-3">
+          <div className="mb-2 text-sm font-semibold text-stone-900">Lệnh đăng mới nhất</div>
+          <div className="space-y-2">
             {publishJobs.map((job) => (
-              <div key={job.id} className="grid gap-2 rounded-md border border-slate-200 p-3 text-sm sm:grid-cols-[1fr_auto]">
+              <div key={job.id} className="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs">
                 <div className="min-w-0">
-                  <div className="font-medium text-ink">Fanpage {job.pageId}</div>
-                  {job.error ? <div className="mt-1 text-xs text-slate-600">{job.error}</div> : null}
+                  <div className="truncate font-semibold text-stone-900">Fanpage {job.pageId}</div>
+                  {job.error ? <div className="truncate text-stone-500">{job.error}</div> : null}
                 </div>
-                <StatusPill tone={jobTone(job.status, job.dryRun)}>
-                  {publishJobLabel(job.status, job.dryRun)}
-                </StatusPill>
+                <StatusPill tone={jobTone(job.status, job.dryRun)}>{publishJobLabel(job.status, job.dryRun)}</StatusPill>
               </div>
             ))}
           </div>
@@ -247,7 +284,7 @@ export function ContentPlannerPostList({
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <button type="button" onClick={onCancelEdit} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 focus-ring">
               <X className="h-4 w-4" aria-hidden="true" />
-              Hủy
+              Huỷ
             </button>
             <button type="button" onClick={onSaveEdit} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-3 text-sm font-semibold text-white focus-ring">
               <Save className="h-4 w-4" aria-hidden="true" />
@@ -261,7 +298,7 @@ export function ContentPlannerPostList({
         <Modal title="Chỉnh lịch đăng" onClose={onCancelSchedule}>
           <div className="grid gap-3">
             <div>
-              <div className="text-sm font-semibold text-ink">{scheduleDraft.title}</div>
+              <div className="text-sm font-semibold text-slate-900">{scheduleDraft.title}</div>
               <div className="mt-1 text-xs text-slate-500">Lịch hiện tại: {formatSchedule(schedulePost.scheduledAt)}</div>
             </div>
             <label className="block">
@@ -277,7 +314,7 @@ export function ContentPlannerPostList({
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <button type="button" onClick={onCancelSchedule} className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 focus-ring">
-              Hủy
+              Huỷ
             </button>
             <button type="button" onClick={() => onSaveSchedule(schedulePost)} className="inline-flex min-h-10 items-center justify-center rounded-md bg-brand-600 px-3 text-sm font-semibold text-white focus-ring">
               Lưu lịch
@@ -287,9 +324,9 @@ export function ContentPlannerPostList({
       ) : null}
 
       {deleteCandidate ? (
-        <Modal title="Xác nhận xóa" onClose={onCancelDelete}>
+        <Modal title="Xác nhận xoá" onClose={onCancelDelete}>
           <p className="text-sm leading-6 text-slate-700">Bạn có chắc muốn xoá bài này không?</p>
-          <p className="mt-2 text-sm font-semibold text-ink">{deleteCandidate.title}</p>
+          <p className="mt-2 text-sm font-semibold text-slate-900">{deleteCandidate.title}</p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <button type="button" onClick={onCancelDelete} className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 focus-ring">
               Huỷ
@@ -309,7 +346,7 @@ function Modal({ title, children, onClose }: { title: string; children: ReactNod
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-3">
       <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-md bg-white p-4 shadow-xl">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h3 className="text-base font-semibold text-ink">{title}</h3>
+          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
           <button type="button" onClick={onClose} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-700 focus-ring" aria-label="Đóng">
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

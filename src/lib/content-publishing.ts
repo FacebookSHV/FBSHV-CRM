@@ -244,6 +244,7 @@ export async function createPublishJobs(input: {
   pageIds: string[];
   scheduledAt?: string | null;
   publishNow?: boolean;
+  waitForMedia?: boolean;
 }) {
   const post = (await listContentPosts()).find((item) => item.id === input.postId);
   if (!post) throw new Error("CONTENT_POST_NOT_FOUND");
@@ -284,9 +285,24 @@ export async function createPublishJobs(input: {
       continue;
     }
 
+    const mediaUrls = usableMediaUrls(media);
+    if (input.waitForMedia && mediaUrls.length === 0) {
+      job = await saveJob({
+        ...job,
+        status: "scheduled",
+        dryRun: false,
+        scheduledAt: now,
+        error: "WAITING_IMAGEFLOW_ASSETS",
+        updatedAt: nowIso()
+      });
+      await updateContentPost(input.postId, { status: "scheduled", error: "WAITING_IMAGEFLOW_ASSETS" });
+      await writeLog(job, "publish_waiting_media", "scheduled", "WAITING_IMAGEFLOW_ASSETS");
+      jobs.push(job);
+      continue;
+    }
+
     try {
       job = await saveJob({ ...job, status: "publishing", dryRun: false, updatedAt: nowIso() });
-      const mediaUrls = usableMediaUrls(media);
       const result = mediaUrls.length > 1
         ? await createAlbumPost({ pageId, message: post.caption, mediaUrls })
         : mediaUrls[0]

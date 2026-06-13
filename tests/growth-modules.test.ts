@@ -136,6 +136,27 @@ describe("growth modules", () => {
     expect((await listPublishJobs(post.id))[0]?.error).toBe("WAITING_IMAGEFLOW_ASSETS");
   });
 
+  it("publish ngay vẫn chờ ảnh thay vì đăng bài chữ khi chưa có media", async () => {
+    process.env.AUTO_PUBLISH_POSTS_ENABLED = "true";
+    const post = await createContentPost({
+      id: "post_publish_waiting_image_1",
+      pageId: "page_test_growth",
+      title: "Bài phải chờ ảnh",
+      caption: "Không được đăng bài chữ khi ảnh đang xử lý",
+      status: "draft"
+    });
+
+    const jobs = await createPublishJobs({
+      postId: post.id,
+      pageIds: ["page_test_growth"],
+      publishNow: true,
+      waitForMedia: true
+    });
+
+    expect(jobs[0]?.status).toBe("scheduled");
+    expect(jobs[0]?.error).toBe("WAITING_IMAGEFLOW_ASSETS");
+  });
+
   it("Content Planner API trả đúng publish setting để UI cảnh báo publish thật", async () => {
     process.env.AUTO_PUBLISH_POSTS_ENABLED = "true";
     expect(isAutoPublishPostsEnabled()).toBe(true);

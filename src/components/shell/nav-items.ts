@@ -2,14 +2,13 @@ import {
   BarChart3,
   Bot,
   Boxes,
-  Cable,
   CalendarDays,
   ClipboardList,
   Gauge,
   History,
   Inbox,
-  ListChecks,
   LayoutTemplate,
+  ListChecks,
   Megaphone,
   SearchCheck,
   Settings,
@@ -32,7 +31,6 @@ export const navItems = [
   { href: "/automation", label: "Automation", icon: Workflow },
   { href: "/ai-assistant", label: "AI Assistant", icon: Bot },
   { href: "/landing-pages", label: "Landing Page", icon: LayoutTemplate },
-  { href: "/imageflow-bridge", label: "Cầu nối ảnh AI", icon: Cable },
   { href: "/reports", label: "Báo cáo", icon: BarChart3 },
   { href: "/settings", label: "Cài đặt", icon: Settings },
   { href: "/settings/integration-jobs", label: "Tiến trình đồng bộ", icon: ListChecks },
@@ -50,11 +48,11 @@ export const navGroups = [
   },
   {
     label: "Tăng trưởng",
-    items: [navItems[8], navItems[9], navItems[10], navItems[11], navItems[12], navItems[13]]
+    items: [navItems[8], navItems[9], navItems[10], navItems[11], navItems[12]]
   },
   {
     label: "Hệ thống",
-    items: [navItems[14], navItems[15], navItems[16]]
+    items: [navItems[13], navItems[14], navItems[15]]
   }
 ] as const;
 

@@ -10,6 +10,7 @@ export async function POST(
     pageIds?: string[];
     scheduledAt?: string | null;
     publishNow?: boolean;
+    waitForMedia?: boolean;
   };
   if (body.pageIds && !Array.isArray(body.pageIds)) return fail("pageIds phải là mảng.", 400, "PAGE_IDS_INVALID");
 
@@ -18,7 +19,8 @@ export async function POST(
       postId: id,
       pageIds: body.pageIds ?? [],
       scheduledAt: body.scheduledAt ?? null,
-      publishNow: body.publishNow ?? true
+      publishNow: body.publishNow ?? true,
+      waitForMedia: body.waitForMedia ?? true
     });
     return ok({ jobs, dryRun: jobs.every((job) => job.dryRun) });
   } catch (error) {
